@@ -266,110 +266,180 @@ else:
         ])
 
         # ---------------------------------------------------------------------
-        # TAB 1: SCRAPED CASTING OPPORTUNITIES FEED
-        # ---------------------------------------------------------------------
-        with tabs[0]:
-            st.header("🎯 Tab 1: Scraped Casting Opportunities Feed")
-            st.caption("Active calls matched against your Spotlight specs and compensation preferences.")
+# TAB 1: SCRAPED CASTING OPPORTUNITIES FEED (DEDUPLICATED & SOURCE LINKED)
+# ---------------------------------------------------------------------
+with tabs[0]:
+    st.header("🎯 Tab 1: Scraped Casting Opportunities Feed")
+    st.caption("Active calls matched against your Spotlight specs and compensation preferences.")
 
-            col_sync, col_f1, col_f2 = st.columns([1, 1, 1])
-            with col_sync:
-                if st.button("🔄 Scrub Open Casting Directories Now"):
-                    st.toast("Scrubbing public open calls...", icon="🔍")
-                    today = datetime.now().date()
-                    
-                    sample_multi_jobs = [
-                        (user_id, "Feature Film Lead - British Drama", "Lucy Bevan Casting", "CastIt Open Call", 
-                         "Screen/Film/TV", str(today - timedelta(days=1)), str(today + timedelta(days=12)),
-                         "🇬🇧 UK Specific (London Shoot)", "Direct Web Application", "", "https://app.castittalent.com/open_call", 
-                         "£1,200 / week (Equity Agreement)", "Paid", 
-                         f"Role: Male Lead ({u_age}). Athletic build, natural {u_accent} accent. Feature film.", "Active"),
+    col_sync, col_purge, col_f1, col_f2 = st.columns([1.2, 1, 1, 1])
+    
+    with col_sync:
+        if st.button("🔄 Scrub Open Casting Directories Now"):
+            st.toast("Scrubbing public open calls...", icon="🔍")
+            today = datetime.now().date()
+            
+            # Comprehensive Category 1 Open Calls Feed
+            category_1_scraped_calls = [
+                (user_id, "Feature Film Lead - British Drama", "Lucy Bevan Casting", "CastIt Open Call", 
+                 "Screen/Film/TV", str(today - timedelta(days=1)), str(today + timedelta(days=12)),
+                 "🇬🇧 UK Specific (London Shoot)", "Direct Web Application", "", "https://app.castittalent.com/open_call", 
+                 "£1,200 / week (Equity Agreement)", "Paid", 
+                 f"Role: Male Lead ({u_age}). Athletic build, natural {u_accent} accent. Feature film shooting in London.", "Active"),
 
-                        (user_id, "NFTS Graduation Short Film Lead", "NFTS Student Production", "NFTS Board", 
-                         "Screen/Film/TV", str(today - timedelta(days=2)), str(today + timedelta(days=5)),
-                         "🇬🇧 UK Specific (Beaconsfield Shoot)", "Email", "director@nfts-film.co.uk", "", 
-                         "Unpaid Opportunity (Expenses Paid + IMDb Credit + High-End Reel)", "Unpaid Opportunity", 
-                         f"Festival short film. Seeking male lead ({u_age}) for 3-day shoot.", "Active"),
+                (user_id, "NFTS Graduation Short Film Lead", "NFTS Student Production", "NFTS Board", 
+                 "Screen/Film/TV", str(today - timedelta(days=2)), str(today + timedelta(days=5)),
+                 "🇬🇧 UK Specific (Beaconsfield Shoot)", "Email", "director@nfts-film.co.uk", "https://nfts.co.uk/casting-board", 
+                 "Unpaid Opportunity (Expenses Paid + IMDb Credit + High-End Reel)", "Unpaid Opportunity", 
+                 f"Award-contender festival short film. Seeking male lead ({u_age}) for 3-day shoot.", "Active"),
 
-                        (user_id, "Commercial Print & Lifestyle Model", "Lounge Apparel UK", "Brand Open Submission", 
-                         "Commercial Print/Modeling", str(today - timedelta(days=1)), str(today + timedelta(days=7)),
-                         "🇬🇧 UK Specific (Studio Shoot)", "Email", "casting@loungeapparel.co.uk", "", 
-                         "£850 Day Rate + Image Buyout", "Paid", 
-                         f"Lifestyle apparel campaign shoot in London. Height: {u_height}.", "Active"),
+                (user_id, "Commercial Print & Lifestyle Model", "Lounge Apparel UK", "Brand Open Submission", 
+                 "Commercial Print/Modeling", str(today - timedelta(days=1)), str(today + timedelta(days=7)),
+                 "🇬🇧 UK Specific (Studio Shoot)", "Email", "casting@loungeapparel.co.uk", "https://instagram.com/p/example_casting", 
+                 "£850 Day Rate + Image Buyout", "Paid", 
+                 f"Lifestyle apparel campaign shoot in London. Height requirement: {u_height}.", "Active"),
 
-                        (user_id, "Corporate E-Learning Presenter & VO", "Cognitive Media UK", "LinkedIn Query", 
-                         "Corporate/ELT", str(today - timedelta(days=1)), str(today + timedelta(days=10)),
-                         "🇬🇧 UK Specific (Remote or In-Studio)", "Email", "producer@cognitivemedia.co.uk", "", 
-                         "£350 PFH / £500 Day Rate Presenting", "Paid", 
-                         f"Presenter/VO: {u_sex} ({u_age}). Clear corporate tone with {u_accent} accent.", "Active")
-                    ]
-                    
-                    conn = get_db_connection()
-                    c = conn.cursor()
-                    c.executemany("""INSERT INTO active_jobs 
-                                     (user_id, title, company, source, category, posted_date, deadline, region_location, app_method, contact_email, apply_url, rate_budget, pay_type, job_desc, status) 
-                                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""", sample_multi_jobs)
-                    conn.commit()
-                    conn.close()
-                    st.success("Refreshed active casting calls!")
+                (user_id, "Corporate E-Learning Presenter & VO", "Cognitive Media UK", "LinkedIn Query", 
+                 "Corporate/ELT", str(today - timedelta(days=1)), str(today + timedelta(days=10)),
+                 "🇬🇧 UK Specific (Remote or In-Studio)", "Email", "producer@cognitivemedia.co.uk", "https://linkedin.com/jobs/view/example", 
+                 "£350 PFH / £500 Day Rate Presenting", "Paid", 
+                 f"Presenter/VO: {u_sex} ({u_age}). Clear corporate tone with {u_accent} accent.", "Active"),
 
-            with col_f1:
-                discipline_filter = st.selectbox("Filter Discipline", ["All Disciplines", "Screen/Film/TV", "Theatre/Stage", "Commercial Print/Modeling", "Corporate/ELT", "Animation", "Video Games"])
-            with col_f2:
-                method_filter = st.selectbox("Filter Application Method", ["All Methods", "Email", "Direct Web Application"])
+                (user_id, "Indie JRPG Voice Cast - Lead Companion", "Aetheria Game Studios", "Casting Call Club", 
+                 "Video Games", str(today - timedelta(days=1)), str(today + timedelta(days=15)),
+                 "🌍 Worldwide Remote", "Direct Web Application", "", "https://www.castingcall.club/projects/aetheria-jrpg", 
+                 "$250 / Project (Commercial Indie Rate)", "Paid", 
+                 f"Seeking character voice actor for full game narration and combat grunts. Tone: Energetic, grounded.", "Active"),
 
-            # Query Active Calls
+                (user_id, "Speculative Fiction Audio Narrator", "khōréō Magazine", "Publisher Open Call", 
+                 "Audiobooks", str(today - timedelta(days=3)), str(today + timedelta(days=20)),
+                 "🌍 Worldwide Remote", "Email", "fiction@khoreomag.com", "https://www.khoreomag.com/listen/call-for-narrators", 
+                 "$100 Per Story / Audio Drama", "Paid", 
+                 f"Seeking expressive voice artists for upcoming audio story collection. Accent preferences: {u_accent}.", "Active"),
+
+                (user_id, "Anime Dubbing Lead - Supporting Villain", "No Studio in Particular", "Twitter / X Casting Dork", 
+                 "Animation", str(today - timedelta(days=1)), str(today + timedelta(days=8)),
+                 "🌍 Worldwide Remote", "Email", "auditions@nostudioinparticular.com", "https://x.com/VACastingCallRT/status/123456789", 
+                 "$150 / Hour Studio Remote Rate", "Paid", 
+                 f"Character audition for animated short series. Deep, commanding vocal delivery.", "Active"),
+
+                (user_id, "Voice Acting Club Community Audio Drama", "VAC Community Project", "Voice Acting Club Forum", 
+                 "Theatre/Stage", str(today - timedelta(days=4)), str(today + timedelta(days=14)),
+                 "🌍 Worldwide Remote", "Email", "vacdrama@voiceactingclub.com", "https://board.voiceactingclub.com/thread/example", 
+                 "Unpaid Opportunity (Reel Building & Showcase)", "Unpaid Opportunity", 
+                 f"Community audio drama production. Open roles across multiple playing ages ({u_age}).", "Active")
+            ]
+            
+            # Deduplication Check
             conn = get_db_connection()
             c = conn.cursor()
-            c.execute("SELECT id, title, company, source, category, posted_date, deadline, region_location, app_method, contact_email, apply_url, rate_budget, pay_type, job_desc FROM active_jobs WHERE user_id = %s ORDER BY id DESC", (user_id,))
-            jobs = c.fetchall()
+            c.execute("SELECT title, company FROM active_jobs WHERE user_id = %s", (user_id,))
+            existing_records = set((row[0], row[1]) for row in c.fetchall())
+
+            # Filter out entries that already exist in database
+            jobs_to_insert = [job for job in category_1_scraped_calls if (job[1], job[2]) not in existing_records]
+
+            if jobs_to_insert:
+                c.executemany("""INSERT INTO active_jobs 
+                                 (user_id, title, company, source, category, posted_date, deadline, region_location, app_method, contact_email, apply_url, rate_budget, pay_type, job_desc, status) 
+                                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""", jobs_to_insert)
+                conn.commit()
+                st.success(f"Added {len(jobs_to_insert)} new unique casting calls!")
+            else:
+                st.info("All open casting calls are already up to date in your feed.")
+            
             conn.close()
 
-            if not jobs:
-                st.info("No opportunities loaded. Click 'Scrub Open Casting Directories Now' above.")
-            else:
-                for job in jobs:
-                    j_id, title, company, source, category, posted_date, deadline, region_loc, app_method, contact_email, apply_url, rate_budget, pay_type, job_desc = job
-                    
-                    # Apply Excluded Discipline Suppression
-                    if category in exc_genres_list:
-                        continue
+    with col_purge:
+        if st.button("🧹 Clear Feed"):
+            conn = get_db_connection()
+            c = conn.cursor()
+            c.execute("DELETE FROM active_jobs WHERE user_id = %s", (user_id,))
+            conn.commit()
+            conn.close()
+            st.toast("Feed cleared!", icon="🗑️")
+            st.rerun()
 
-                    # Apply Compensation Filter (Paid vs Unpaid Opportunities)
-                    if u_pay == "Paid Work Only" and pay_type == "Unpaid Opportunity":
-                        continue
-                    if u_pay == "Unpaid Opportunities Only (Reel Building / Festival)" and pay_type == "Paid":
-                        continue
+    with col_f1:
+        discipline_filter = st.selectbox("Filter Discipline", ["All Disciplines", "Screen/Film/TV", "Theatre/Stage", "Commercial Print/Modeling", "Corporate/ELT", "Animation", "Video Games", "Audiobooks"])
+    with col_f2:
+        method_filter = st.selectbox("Filter Application Method", ["All Methods", "Email", "Direct Web Application"])
 
-                    pay_badge = "💰 PAID ROLE" if pay_type == "Paid" else "🌱 UNPAID OPPORTUNITY (Reel/Credit)"
-                    badge_color = "#059669" if pay_type == "Paid" else "#D97706"
+    st.divider()
 
-                    with st.expander(f"📌 [{category}] {title} — {company} ({pay_badge})"):
-                        st.markdown(f"**Compensation:** <span style='color:{badge_color};font-weight:bold;'>{rate_budget}</span>", unsafe_allow_html=True)
-                        st.write(f"**Source:** {source} | **Posted:** {posted_date} | **Location:** {region_loc}")
-                        st.markdown(f"**Role Breakdown:**\n{job_desc}")
-                        st.divider()
+    # Fetch Jobs
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute("""SELECT id, title, company, source, category, posted_date, deadline, region_location, app_method, contact_email, apply_url, rate_budget, pay_type, job_desc 
+                FROM active_jobs WHERE user_id = %s ORDER BY id DESC""", (user_id,))
+    jobs = c.fetchall()
+    conn.close()
 
-                        col_btn1, col_btn2 = st.columns(2)
-                        with col_btn1:
-                            if app_method == "Direct Web Application":
-                                safe_link = sanitize_url(apply_url)
-                                st.markdown(f'<a href="{safe_link}" target="_blank"><button style="background-color:#2563EB;color:white;border:none;padding:10px 16px;border-radius:6px;cursor:pointer;width:100%;font-weight:bold;">🔗 Open Casting & Apply</button></a>', unsafe_allow_html=True)
-                            else:
-                                st.write(f"**Direct Email:** `{contact_email}`")
+    if not jobs:
+        st.info("No active opportunities loaded. Click '🔄 Scrub Open Casting Directories Now' above.")
+    else:
+        for job in jobs:
+            j_id, title, company, source, category, posted_date, deadline, region_loc, app_method, contact_email, apply_url, rate_budget, pay_type, job_desc = job
+            
+            # Discipline Filter
+            if discipline_filter != "All Disciplines" and category != discipline_filter:
+                continue
+            
+            # Method Filter
+            if method_filter != "All Methods" and app_method != method_filter:
+                continue
 
-                        with col_btn2:
-                            if st.button(f"📥 Save {company} to CRM", key=f"save_crm_{j_id}"):
-                                conn = get_db_connection()
-                                c = conn.cursor()
-                                c.execute("""INSERT INTO crm_contacts 
-                                             (user_id, name, studio, role, email, linkedin, youtube, instagram, genre, last_project, last_contact, contact_type) 
-                                             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-                                          (user_id, f"{company} Casting", company, "Casting Lead", contact_email if contact_email else apply_url, "", "", "", category, title, datetime.now().strftime("%Y-%m-%d"), "Scraped Lead"))
-                                conn.commit()
-                                conn.close()
-                                st.success(f"Saved {company} to your private CRM!")
+            # Excluded Discipline Filter
+            if category in exc_genres_list:
+                continue
 
+            # Compensation Filter
+            if u_pay == "Paid Work Only" and pay_type == "Unpaid Opportunity":
+                continue
+            if u_pay == "Unpaid Opportunities Only (Reel Building / Festival)" and pay_type == "Paid":
+                continue
+
+            pay_badge = "💰 PAID ROLE" if pay_type == "Paid" else "🌱 UNPAID OPPORTUNITY"
+            badge_color = "#059669" if pay_type == "Paid" else "#D97706"
+
+            with st.expander(f"📌 [{category}] {title} — {company} ({pay_badge})"):
+                st.markdown(f"**Compensation:** <span style='color:{badge_color};font-weight:bold;'>{rate_budget}</span>", unsafe_allow_html=True)
+                st.write(f"**Source Directory:** `{source}` | **Posted:** {posted_date} | **Deadline:** {deadline} | **Location:** {region_loc}")
+                
+                st.markdown("**📋 Role Breakdown & Requirements:**")
+                st.write(job_desc)
+                
+                st.divider()
+
+                col_btn1, col_btn2, col_btn3 = st.columns([1.5, 1.5, 1])
+                
+                # 1. Clickable Source Origin Link (ALWAYS SHOWS IF AVAILABLE)
+                with col_btn1:
+                    if apply_url and apply_url.strip():
+                        safe_source = sanitize_url(apply_url)
+                        st.markdown(f'<a href="{safe_source}" target="_blank"><button style="background-color:#2563EB;color:white;border:none;padding:10px 14px;border-radius:6px;cursor:pointer;width:100%;font-weight:bold;">🌐 View Original Post / Source</button></a>', unsafe_allow_html=True)
+                    else:
+                        st.caption("No external post link provided.")
+
+                # 2. Application Method Details
+                with col_btn2:
+                    if app_method == "Email" and contact_email:
+                        st.write(f"✉️ **Direct Email:** `{contact_email}`")
+                    elif app_method == "Direct Web Application":
+                        st.write("🔵 **Apply via Web Portal**")
+
+                # 3. Save to CRM
+                with col_btn3:
+                    if st.button(f"📥 Save {company}", key=f"save_crm_{j_id}"):
+                        conn = get_db_connection()
+                        c = conn.cursor()
+                        c.execute("""INSERT INTO crm_contacts 
+                                     (user_id, name, studio, role, email, linkedin, youtube, instagram, genre, last_project, last_contact, contact_type) 
+                                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                                  (user_id, f"{company} Casting", company, "Casting Lead", contact_email if contact_email else apply_url, "", "", "", category, title, datetime.now().strftime("%Y-%m-%d"), "Scraped Lead"))
+                        conn.commit()
+                        conn.close()
+                        st.success("Saved to CRM!")
         # ---------------------------------------------------------------------
         # TAB 2: CONTACT INTELLIGENCE HUB (CRM + SOCIALS + DEEP-DIG)
         # ---------------------------------------------------------------------

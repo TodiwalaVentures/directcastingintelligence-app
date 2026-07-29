@@ -151,10 +151,10 @@ def sanitize_url(url: str) -> str:
     return "#"
 
 # -----------------------------------------------------------------------------
-# 4. MASTER MULTI-SOURCE LIVE SCRAPING & DIRECT LINK ENGINE
+# 4. MASTER MULTI-SOURCE LIVE SCRAPING ENGINE (100% AUTHENTIC JOBS ONLY)
 # -----------------------------------------------------------------------------
 def fetch_live_casting_opportunities(user_id):
-    """Executes live network requests and expanded search protocols across all high-yield casting feeds."""
+    """Fetches real individual casting calls from open directories, APIs, and forums."""
     scraped_jobs = []
     today = datetime.now().date()
     today_str = str(today)
@@ -170,7 +170,7 @@ def fetch_live_casting_opportunities(user_id):
         with urllib.request.urlopen(req, timeout=5) as resp:
             xml_data = resp.read()
             root = ET.fromstring(xml_data)
-            for item in root.findall('.//item')[:6]:
+            for item in root.findall('.//item')[:8]:
                 title = item.find('title').text if item.find('title') is not None else "VAC Audition Call"
                 link = item.find('link').text if item.find('link') is not None else "https://board.voiceactingclub.com/"
                 raw_desc = item.find('description').text if item.find('description') is not None else "Voice Acting Club community notice."
@@ -183,7 +183,7 @@ def fetch_live_casting_opportunities(user_id):
     except Exception as e:
         print(f"[Scraper Warning] VAC RSS: {e}")
 
-    # 2. LIVE SCRAPE: Casting Call Club (CCC) Public API Feed (EXPANDED TO 15 RESULTS)
+    # 2. LIVE SCRAPE: Casting Call Club (CCC) Public API Feed
     try:
         req = urllib.request.Request("https://www.castingcall.club/api/v1/projects?limit=15", headers=headers)
         with urllib.request.urlopen(req, timeout=5) as resp:
@@ -201,7 +201,7 @@ def fetch_live_casting_opportunities(user_id):
     except Exception as e:
         print(f"[Scraper Warning] CCC API: {e}")
 
-    # 3. LIVE SCRAPE: EXPANDED REDDIT SUBREDDIT & KEYWORD MATRIX
+    # 3. LIVE SCRAPE: 9 REDDIT SUBREDDITS
     reddit_subs = [
         "recordthis", "VoiceActing", "CastingSeeks", "VoiceOver", 
         "INAT", "Audiodrama", "IndieDev", "gamedev", "CastingCalls"
@@ -234,51 +234,6 @@ def fetch_live_casting_opportunities(user_id):
         except Exception as e:
             print(f"[Scraper Warning] Reddit /r/{sub}: {e}")
 
-    # 4. DIRECT HIGH-YIELD SEARCH ENGINES & DORKS
-    linkedin_posts_url = "https://www.linkedin.com/search/results/content/?keywords=%22casting%22%20AND%20(%22voice%20actor%20needed%22%20OR%20%22voice%20artist%20needed%22%20OR%20%22voiceover%20artist%20needed%22%20OR%20%22seeking%20voice%20actor%22)&sortBy=%22date_posted%22"
-    linkedin_jobs_url = "https://www.linkedin.com/jobs/search/?keywords=(%22voiceover%22%20OR%20%22voice%20actor%22%20OR%20%22voice%20artist%22)"
-    twitter_vac_url = "https://x.com/search?q=(%23VACasting%20OR%20%23VACastingCall%20OR%20%23VOCasting%20OR%20%22voice%20actor%20needed%22)&f=live"
-    bluesky_search_url = "https://bsky.app/search?q=%22casting%20call%22%20%22voice%22"
-    google_forms_dork_url = "https://www.google.com/search?q=site:docs.google.com/forms+%22casting+call%22+(%22voice+actor%22+OR+%22voiceover%22)"
-
-    multi_directory_entries = [
-        (user_id, "Speculative Fiction Audio Narrator Calls", "khōréō Magazine", "khōréō", 
-         "Audiobooks", today_str, str(today + timedelta(days=20)),
-         "🌍 Worldwide Remote", "Email", "fiction@khoreomag.com", "https://www.khoreomag.com/listen/call-for-narrators/", 
-         "$100 Per Story / Audio Drama", "Paid", 
-         "Seeking expressive voice artists for upcoming speculative fiction story collection.", 
-         "Any", "18-60", "RP, British Indian, General British", "Warm, Expressive, Rich"),
-
-        (user_id, "Live LinkedIn Casting Posts Feed", "LinkedIn Creator Engine", "LinkedIn Posts Search", 
-         "Corporate/ELT", today_str, str(today + timedelta(days=7)),
-         "🇬🇧 UK Specific / Remote", "Direct Web Application", "", linkedin_posts_url, 
-         "Commercial & Corporate Rates", "Paid", 
-         "Direct LinkedIn search targeting feed updates from directors posting 'Voice Actor Needed' and 'Casting Notice'.", 
-         "Any", "25-50", "RP, British Indian, West Midlands", "Warm, Articulate, Corporate"),
-
-        (user_id, "Google Forms Direct Casting Submissions", "Google Index Dork Engine", "Google Forms Search", 
-         "Animation", today_str, str(today + timedelta(days=10)),
-         "🌍 Worldwide Remote", "Direct Web Application", "", google_forms_dork_url, 
-         "Variable / Indie & Commercial", "Paid", 
-         "Live Google search finding direct Google Form submission sheets created by casting directors.", 
-         "Any", "18-50", "General British, RP, US", "Character, Versatile"),
-
-        (user_id, "Bluesky Voice Casting Feed", "Bluesky Network", "Bluesky Social", 
-         "Animation", today_str, str(today + timedelta(days=5)),
-         "🌍 Worldwide Remote", "Direct Web Application", "", bluesky_search_url, 
-         "Indie & Studio Rates", "Paid", 
-         "Live feed search for active casting calls and voice director posts on Bluesky.", 
-         "Any", "20-45", "RP, General British", "Conversational, Energetic"),
-
-        (user_id, "Twitter/X Real-Time VO Audition Feed", "Twitter/X VO Community", "Twitter/X Search", 
-         "Animation", today_str, str(today + timedelta(days=7)),
-         "🌍 Worldwide Remote", "Direct Web Application", "", twitter_vac_url, 
-         "$150 / Hour Studio Remote Rate", "Paid", 
-         "Direct live feed targeting #VACastingCall, #VOCasting, and direct director requests.", 
-         "Male", "30-50", "RP, Mid-Atlantic", "Deep, Commanding, Gritty")
-    ]
-
-    scraped_jobs.extend(multi_directory_entries)
     return scraped_jobs
 
 # -----------------------------------------------------------------------------
@@ -477,11 +432,31 @@ else:
             st.header("🎯 Tab 1: Scraped Casting Opportunities Feed")
             st.caption("Active calls matched against your Spotlight specs: Age, Gender, Accents, and Vocal Quality.")
 
+            # DEDICATED REAL-TIME SEARCH ENGINES & DORKS (SEPARATED FROM LIVE JOB CARDS)
+            with st.expander("🔎 Launch External Real-Time Search Engines (LinkedIn, Bluesky, Twitter, Google Forms)", expanded=False):
+                st.markdown("Use these pre-formatted queries to open live real-time feeds on platforms requiring browser sessions:")
+                
+                s_col1, s_col2, s_col3, s_col4 = st.columns(4)
+                with s_col1:
+                    li_posts_url = "https://www.linkedin.com/search/results/content/?keywords=%22casting%22%20AND%20(%22voice%20actor%20needed%22%20OR%20%22voice%20artist%20needed%22%20OR%20%22seeking%20voice%20actor%22)&sortBy=%22date_posted%22"
+                    st.markdown(f'<a href="{li_posts_url}" target="_blank"><button style="background-color:#0077B5;color:white;border:none;padding:10px;border-radius:6px;cursor:pointer;width:100%;font-weight:bold;">🔗 LinkedIn Live Posts</button></a>', unsafe_allow_html=True)
+                with s_col2:
+                    bsky_url = "https://bsky.app/search?q=%22casting%20call%22%20voice"
+                    st.markdown(f'<a href="{bsky_url}" target="_blank"><button style="background-color:#0085FF;color:white;border:none;padding:10px;border-radius:6px;cursor:pointer;width:100%;font-weight:bold;">🦋 Bluesky Casting Feed</button></a>', unsafe_allow_html=True)
+                with s_col3:
+                    tw_url = "https://x.com/search?q=(%23VACastingCall%20OR%20%23VOCasting%20OR%20%22voice%20actor%20needed%22)&f=live"
+                    st.markdown(f'<a href="{tw_url}" target="_blank"><button style="background-color:#000000;color:white;border:none;padding:10px;border-radius:6px;cursor:pointer;width:100%;font-weight:bold;">🐦 Twitter/X Live Feed</button></a>', unsafe_allow_html=True)
+                with s_col4:
+                    gf_url = "https://www.google.com/search?q=site:docs.google.com/forms+%22casting+call%22+(%22voice+actor%22+OR+%22voiceover%22)"
+                    st.markdown(f'<a href="{gf_url}" target="_blank"><button style="background-color:#0F9D58;color:white;border:none;padding:10px;border-radius:6px;cursor:pointer;width:100%;font-weight:bold;">📋 Google Forms Search</button></a>', unsafe_allow_html=True)
+
+            st.divider()
+
             col_sync, col_purge = st.columns([1.5, 1])
             
             with col_sync:
                 if st.button("🔄 Scrub Open Casting Directories Now"):
-                    st.toast("Scrubbing live external directories & forums...", icon="🔍")
+                    st.toast("Scrubbing live external directories, APIs & subreddits...", icon="🔍")
                     
                     scraped_data_feed = fetch_live_casting_opportunities(user_id)
                     
@@ -500,6 +475,7 @@ else:
                                         f"{j[13]}\n\n[REQ_METADATA|Sex:{j[14]}|Age:{j[15]}|Accents:{j[16]}|Style:{j[17]}]", "Active") for j in jobs_to_insert])
                         conn.commit()
                         st.success(f"Fetched {len(jobs_to_insert)} new live casting calls across all directories!")
+                        st.rerun()
                     else:
                         st.info("Live feed is fully up to date.")
                     conn.close()
@@ -832,7 +808,7 @@ Spotlight Profile: {u_spotlight}{gdpr_footer}"""
                             st.markdown(f'<a href="{clean_link}" target="_blank"><button style="background-color:#2563EB;color:white;border:none;padding:12px 18px;border-radius:6px;cursor:pointer;width:100%;font-weight:bold;margin-top:10px;">🔗 Open Intake Portal</button></a>', unsafe_allow_html=True)
 
         # ---------------------------------------------------------------------
-        # TAB 5: SPOTLIGHT PROFILE & GDPR PRIVACY CONTROLS (CORRECTED UPDATE)
+        # TAB 5: SPOTLIGHT PROFILE & GDPR PRIVACY CONTROLS
         # ---------------------------------------------------------------------
         with tabs[4]:
             st.header("👤 Tab 5: Spotlight Profile & GDPR Controls")

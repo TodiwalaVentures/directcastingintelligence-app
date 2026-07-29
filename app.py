@@ -440,6 +440,105 @@ with tabs[0]:
                         conn.commit()
                         conn.close()
                         st.success("Saved to CRM!")
+# Inside Tab 1 (Opportunities Feed)
+st.markdown("### 🔍 Opportunity Search & Specs")
+f_col1, f_col2, f_col3, f_col4 = st.columns(4)
+with f_col1:
+    discipline_filter = st.selectbox("Discipline", ["All Disciplines", "Screen/Film/TV", "Theatre/Stage", "Commercial Print/Modeling", "Corporate/ELT", "Animation", "Video Games", "Audiobooks"])
+with f_col2:
+    gender_filter = st.selectbox("Target Sex / Gender", ["All / Any", "Male", "Female"])
+with f_col3:
+    method_filter = st.selectbox("Application Method", ["All Methods", "Email", "Direct Web Application"])
+with f_col4:
+    # Soft vocal filter notice
+    strict_vocal = st.checkbox("Strict Voice Quality Filter", value=False, help="Uncheck to keep adaptable voice roles visible.")
+
+st.divider()
+
+# Fetch Jobs and Render
+conn = get_db_connection()
+c = conn.cursor()
+c.execute("""SELECT id, title, company, source, category, posted_date, deadline, region_location, app_method, contact_email, apply_url, rate_budget, pay_type, job_desc 
+            FROM active_jobs WHERE user_id = %s ORDER BY id DESC""", (user_id,))
+jobs = c.fetchall()
+conn.close()
+
+if not jobs:
+    st.info("No active opportunities loaded. Click '🔄 Scrub Open Casting Directories Now' above.")
+else:
+    for job in jobs:
+        j_id, title, company, source, category, posted_date, deadline, region_loc, app_method, contact_email, apply_url, rate_budget, pay_type, job_desc = job
+        
+        # Extract Metadata Block
+        req_sex, req_age, req_accents, req_style = "Any", "Unspecified", "Any", "General"
+        clean_desc = job_desc
+
+        if "[REQ_METADATA|" in job_desc:
+            parts = job_desc.split("[REQ_METADATA|")
+            clean_desc = parts[0].strip()
+            meta_str = parts[1].replace("]", "").strip()
+            for item in meta_str.split("|"):
+                if item.startswith("Sex:"): req_sex = item.replace("Sex:", "").strip()
+                elif item.startswith("Age:"): req_age = item.replace("Age:", "").strip()
+                elif item.startswith("Accents:"): req_accents = item.replace("Accents:", "").strip()
+                elif item.startswith("Style:"): req_style = item.replace("Style:", "").strip()
+
+        # UI Filters
+        if discipline_filter != "All Disciplines" and category != discipline_filter: continue
+        if method_filter != "All Methods" and app_method != method_filter: continue
+        if gender_filter != "All / Any" and req_sex != "Any" and req_sex != gender_filter: continue
+        if category in exc_genres_list: continue
+        if u_pay == "Paid Work Only" and pay_type == "Unpaid Opportunity": continue
+        if u_pay == "Unpaid Opportunities Only (Reel Building / Festival)" and pay_type == "Paid": continue
+
+        # SOFT VOCAL STYLE MATCHING (NEVER HIDES UNLESS STRICT CHECKED)
+        user_default_style = u_desc.lower() if u_desc else ""
+        req_style_clean = req_style.lower()
+        
+        if req_style_clean in user_default_style or "general" in req_style_clean:
+            vocal_badge = f"<span style='background-color:#DCFCE7;color:#166534;padding:4px 8px;border-radius:4px;font-size:12px;font-weight:bold;'>🔊 Natural Voice Match: {req_style}</span>"
+        else:
+            # Displays as an adaptable role opportunity rather than an error/mismatch
+            vocal_badge = f"<span style='background-color:#FEF3C7;color:#92400E;padding:4px 8px;border-radius:4px;font-size:12px;font-weight:bold;'>🎭 Adaptable Vocal Role: Requires {req_style}</span>"
+
+        # Apply Strict Filter ONLY if explicitly opted in
+        if strict_vocal and req_style_clean not in user_default_style:
+            continue
+
+        pay_badge = "💰 PAID ROLE" if pay_type == "Paid" else "🌱 UNPAID OPPORTUNITY"
+        badge_color = "#059669" if pay_type == "Paid" else "#D97706"
+
+        with st.expander(f"📌 [{category}] {title} — {company} ({pay_badge})"):
+            st.markdown(f"**Compensation:** <span style='color:{badge_color};font-weight:bold;'>{rate_budget}</span> | {vocal_badge}", unsafe_allow_html=True)
+            st.write(f"**Specs:** `👤 Sex: {req_sex}` | `🎂 Playing Age: {req_age}` | `🎙️ Accents: {req_accents}`")
+            st.write(f"**Source Directory:** `{source}` | **Posted:** {posted_date} | **Deadline:** {deadline} | **Location:** {region_loc}")
+            
+            st.markdown("**📋 Role Breakdown:**")
+            st.write(clean_desc)
+            
+            st.divider()
+
+            col_btn1, col_btn2, col_btn3 = st.columns([1.5, 1.5, 1])
+            with col_btn1:
+                if apply_url and apply_url.strip():
+                    safe_source = sanitize_url(apply_url)
+                    st.markdown(f'<a href="{safe_source}" target="_blank"><button style="background-color:#2563EB;color:white;border:none;padding:10px 14px;border-radius:6px;cursor:pointer;width:100%;font-weight:bold;">🌐 View Original Post / Source</button></a>', unsafe_allow_html=True)
+            with col_btn2:
+                if app_method == "Email" and contact_email:
+                    st.write(f"✉️ **Direct Email:** `{contact_email}`")
+                elif app_method == "Direct Web Application":
+                    st.write("🔵 **Apply via Web Portal**")
+            with col_btn3:
+                if st.button(f"📥 Save {company}", key=f"save_crm_{j_id}"):
+                    conn = get_db_connection()
+                    c = conn.cursor()
+                    c.execute("""INSERT INTO crm_contacts 
+                                 (user_id, name, studio, role, email, linkedin, youtube, instagram, genre, last_project, last_contact, contact_type) 
+                                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                              (user_id, f"{company} Casting", company, "Casting Lead", contact_email if contact_email else apply_url, "", "", "", category, title, datetime.now().strftime("%Y-%m-%d"), "Scraped Lead"))
+                    conn.commit()
+                    conn.close()
+                    st.success("Saved to CRM!")
         # ---------------------------------------------------------------------
         # TAB 2: CONTACT INTELLIGENCE HUB (CRM + SOCIALS + DEEP-DIG)
         # ---------------------------------------------------------------------

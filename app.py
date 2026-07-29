@@ -715,3 +715,51 @@ Spotlight Profile: {u_spotlight}{gdpr_footer}"""
                         else:
                             conn.close()
                             st.error("Incorrect password. Account deletion cancelled.")
+# Inside Tab 5 (Profile & GDPR)
+with st.form("dci_expanded_profile_form"):
+    st.subheader("1. Compensation & Opportunity Preferences")
+    pay_pref_choice = st.radio(
+        "Work Types to Display in Tab 1:",
+        ["Both Paid Roles & Unpaid Opportunities", "Paid Work Only", "Unpaid Opportunities Only (Reel Building / Festival)"],
+        index=0 if "Both" in u_pay else (1 if "Paid Work Only" in u_pay else 2)
+    )
+
+    st.divider()
+    st.subheader("2. Spotlight Physical & Vocal Specs")
+    c_p1, c_p2, c_p3 = st.columns(3)
+    with c_p1:
+        sex_val = st.selectbox("Sex / Gender", ["Male", "Female", "Non-Binary / Any"], index=0 if u_sex == "Male" else 1)
+        age_val = st.text_input("Playing Age Range", value=u_age)
+        height_val = st.text_input("Height", value=u_height)
+    with c_p2:
+        hair_val = st.text_input("Hair Color", value=u_hair)
+        eye_val = st.text_input("Eye Color", value=u_eyes)
+        union_val = st.text_input("Union Status", value=u_union)
+    with c_p3:
+        base_val = st.text_input("Primary Base", value=u_base)
+        spotlight_val = st.text_input("Spotlight PIN / IMDb Link", value=u_spotlight)
+        accent_val = st.text_input("Accents & Dialects", value=u_accent)
+
+    st.divider()
+    st.subheader("3. Vocal Modulation & Performance Range")
+    desc_val = st.text_input("Default Vocal Tone (e.g., Warm, Conversational, Articulate)", value=u_desc)
+    
+    # Vocal Modulation Flexibility
+    vocal_flexibility = st.multiselect(
+        "Vocal Styles You Can Modulate To (Prevents Unfair Filtering):",
+        ["Warm", "Deep / Resonant", "High Energy / Youthful", "Gritty / Villainous", "Authoritative", "Conversational", "Character / Comedic"],
+        default=["Warm", "Deep / Resonant", "Conversational", "Authoritative"]
+    )
+    vocal_flex_str = ",".join(vocal_flexibility)
+
+    if st.form_submit_button("🚀 Save DCI Profile Criteria"):
+        conn = get_db_connection()
+        c = conn.cursor()
+        c.execute("""UPDATE profile SET age_range=%s, sex=%s, height=%s, hair_color=%s, eye_color=%s, 
+                     primary_base=%s, spotlight_url=%s, accent=%s, voice_desc=%s, union_status=%s, pay_preference=%s 
+                     WHERE user_id=%s""", 
+                  (age_val, sex_val, height_val, hair_val, eye_val, base_val, spotlight_val, accent_val, desc_val, union_val, pay_pref_choice, user_id))
+        conn.commit()
+        conn.close()
+        st.success("Profile criteria and vocal range updated!")
+        st.rerun()

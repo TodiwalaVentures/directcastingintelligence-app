@@ -151,23 +151,26 @@ def sanitize_url(url: str) -> str:
     return "#"
 
 # -----------------------------------------------------------------------------
-# 4. MASTER MULTI-SOURCE LIVE SCRAPING & EXPANDED PRECISION DORK ENGINE
+# 4. MASTER MULTI-SOURCE LIVE SCRAPING & DIRECT LINK ENGINE
 # -----------------------------------------------------------------------------
 def fetch_live_casting_opportunities(user_id):
-    """Executes live network requests and expanded precision dork generation across all targeted sources."""
+    """Executes live network requests and pulls direct working links across all targeted sources."""
     scraped_jobs = []
     today = datetime.now().date()
     today_str = str(today)
     deadline_str = str(today + timedelta(days=14))
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) DirectCastingBot/2.0'}
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
+    }
 
     # 1. LIVE SCRAPE: Voice Acting Club (VAC) Forum RSS Feed
     try:
         req = urllib.request.Request("https://board.voiceactingclub.com/rss/topics", headers=headers)
-        with urllib.request.urlopen(req, timeout=4) as resp:
+        with urllib.request.urlopen(req, timeout=5) as resp:
             xml_data = resp.read()
             root = ET.fromstring(xml_data)
-            for item in root.findall('.//item')[:3]:
+            for item in root.findall('.//item')[:4]:
                 title = item.find('title').text if item.find('title') is not None else "VAC Audition Call"
                 link = item.find('link').text if item.find('link') is not None else "https://board.voiceactingclub.com/"
                 raw_desc = item.find('description').text if item.find('description') is not None else "Voice Acting Club community notice."
@@ -177,15 +180,15 @@ def fetch_live_casting_opportunities(user_id):
                     "Animation", today_str, deadline_str, "🌍 Worldwide Remote", "Email", "vacdrama@voiceactingclub.com", link,
                     "Commercial / Standard Indie Rate", "Paid", clean_desc, "Any", "18-50", "RP, General British, US", "Character, Conversational"
                 ))
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[Scraper Warning] VAC RSS: {e}")
 
     # 2. LIVE SCRAPE: Casting Call Club (CCC) Public API Feed
     try:
-        req = urllib.request.Request("https://www.castingcall.club/api/v1/projects?limit=3", headers=headers)
-        with urllib.request.urlopen(req, timeout=4) as resp:
+        req = urllib.request.Request("https://www.castingcall.club/api/v1/projects?limit=4", headers=headers)
+        with urllib.request.urlopen(req, timeout=5) as resp:
             data = json.loads(resp.read().decode('utf-8'))
-            for proj in data.get('projects', [])[:3]:
+            for proj in data.get('projects', [])[:4]:
                 p_title = proj.get('title', 'CCC Open Casting Project')
                 p_id = proj.get('id', '')
                 p_url = f"https://www.castingcall.club/projects/{p_id}" if p_id else "https://www.castingcall.club/homepage"
@@ -195,11 +198,11 @@ def fetch_live_casting_opportunities(user_id):
                     "Video Games", today_str, deadline_str, "🌍 Worldwide Remote", "Direct Web Application", "", p_url,
                     "$150 - $400 / Commercial Project", "Paid", p_desc, "Male", "20-40", "General British, US, RP", "Energetic, Grounded"
                 ))
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[Scraper Warning] CCC API: {e}")
 
-    # 3. LIVE SCRAPE: Reddit Audio & Casting Feeds (EXPANDED KEYWORD FILTERING)
-    reddit_subs = ["recordthis", "VoiceActing", "CastingSeeks"]
+    # 3. LIVE SCRAPE: Reddit Audio & Casting Feeds
+    reddit_subs = ["recordthis", "VoiceActing", "CastingSeeks", "VoiceOver"]
     reddit_keywords = [
         'paid', 'casting', 'hiring', 'looking for', 'casting call', 
         'voice actor', 'voice artist', 'voice actor needed', 'voice artist needed', 
@@ -207,8 +210,8 @@ def fetch_live_casting_opportunities(user_id):
     ]
     for sub in reddit_subs:
         try:
-            req = urllib.request.Request(f"https://www.reddit.com/r/{sub}/new.json?limit=4", headers=headers)
-            with urllib.request.urlopen(req, timeout=3) as resp:
+            req = urllib.request.Request(f"https://www.reddit.com/r/{sub}/new.json?limit=5", headers=headers)
+            with urllib.request.urlopen(req, timeout=4) as resp:
                 r_data = json.loads(resp.read().decode('utf-8'))
                 posts = r_data.get('data', {}).get('children', [])
                 for p in posts:
@@ -224,14 +227,16 @@ def fetch_live_casting_opportunities(user_id):
                             "$100 - $300 / Project Rate", "Paid" if "[paid]" in r_title.lower() else "Unpaid Opportunity",
                             r_text if r_text else "Reddit open audition call.", "Any", "20-50", "RP, General British", "Warm, Conversational"
                         ))
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[Scraper Warning] Reddit /r/{sub}: {e}")
 
-    # 4. LIVE DIRECTORY CALLS & EXPANDED PRECISION SEARCH DORKS
-    linkedin_dork_url = "https://www.linkedin.com/jobs/search/?keywords=%22voiceover%20casting%22%20OR%20%22voice%20actor%20needed%22%20OR%20%22voice%20artist%20needed%22%20OR%20%22casting%20call%22"
-    twitter_vac_dork_url = "https://x.com/search?q=(VACastingCallRT%20OR%20%23VACastingCall)%20(%22casting%20call%22%20OR%20%22voice%20actor%20needed%22)&f=live"
-    twitter_nsip_dork_url = "https://x.com/search?q=(%22No%20Studio%20in%20Particular%22%20OR%20NSIPStudio)%20(%22casting%20call%22%20OR%20%22voice%20actor%20needed%22)&f=live"
-    newgrounds_dork_url = "https://www.newgrounds.com/bbs/search/forum/23?glob=casting+call+voice+actor+needed"
+    # 4. DIRECT WORKING PLATFORM LINKS (NO DEAD GOOGLE SEARCH DORKS)
+    linkedin_jobs_url = "https://www.linkedin.com/jobs/search/?keywords=%22voiceover%20casting%22%20OR%20%22voice%20actor%20needed%22"
+    twitter_vac_url = "https://x.com/search?q=(VACastingCallRT%20OR%20%23VACastingCall)&f=live"
+    twitter_nsip_url = "https://x.com/search?q=(%22No%20Studio%20in%20Particular%22%20OR%20NSIPStudio)&f=live"
+    newgrounds_forum_url = "https://www.newgrounds.com/bbs/forum/23"
+    vaa_facebook_url = "https://www.facebook.com/groups/voiceactingallianceunofficialgroup/"
+    vo_market_url = "https://www.voiceovermarket.co.uk/registertalent"
 
     multi_directory_entries = [
         (user_id, "Speculative Fiction Audio Narrator", "khōréō Magazine", "khōréō", 
@@ -243,44 +248,44 @@ def fetch_live_casting_opportunities(user_id):
 
         (user_id, "Indie Game & Animation Voice Roster Search", "Newgrounds VA Community", "Newgrounds - Forum", 
          "Video Games", today_str, str(today + timedelta(days=14)),
-         "🌍 Worldwide Remote", "Direct Web Application", "", newgrounds_dork_url, 
+         "🌍 Worldwide Remote", "Direct Web Application", "", newgrounds_forum_url, 
          "Variable / Indie Budget", "Paid", 
-         "Live targeted search for active Newgrounds voice actor casting calls and threads.", 
+         "Direct link to active Newgrounds voice acting forum boards and audition threads.", 
          "Any", "18-40", "General British, US", "Character, Energetic"),
 
         (user_id, "Anime Dubbing & VO Calls Feed", "VA Casting Call RT", "VA Casting Call RT (Twitter/X)", 
          "Animation", today_str, str(today + timedelta(days=8)),
-         "🌍 Worldwide Remote", "Direct Web Application", "", twitter_vac_dork_url, 
+         "🌍 Worldwide Remote", "Direct Web Application", "", twitter_vac_url, 
          "$150 / Hour Studio Remote Rate", "Paid", 
-         "Live Twitter/X search dork targeting '#VACastingCall', 'Casting Call', and 'Voice Actor Needed'.", 
+         "Direct Twitter/X feed for '#VACastingCall' and voice audition announcements.", 
          "Male", "30-50", "RP, Mid-Atlantic", "Deep, Commanding, Gritty"),
 
         (user_id, "Public Director Query & Short Film Calls", "No Studio in Particular", "No Studio in Particular (Twitter)", 
          "Screen/Film/TV", today_str, str(today + timedelta(days=10)),
-         "🌍 Worldwide Remote", "Direct Web Application", "", twitter_nsip_dork_url, 
+         "🌍 Worldwide Remote", "Direct Web Application", "", twitter_nsip_url, 
          "£250 / Day Rate", "Paid", 
-         "Live search dork for indie studio casting calls, short films, and character voice actor queries.", 
+         "Direct Twitter/X studio casting posts and character voice actor queries.", 
          "Any", "25-40", "RP, London", "Dramatic, Natural"),
 
         (user_id, "B2B Voice & Corporate Presenter Calls", "LinkedIn Talent Dork Engine", "LinkedIn B2B Queries", 
          "Corporate/ELT", today_str, str(today + timedelta(days=15)),
-         "🇬🇧 UK Specific / Remote", "Direct Web Application", "", linkedin_dork_url, 
+         "🇬🇧 UK Specific / Remote", "Direct Web Application", "", linkedin_jobs_url, 
          "£350 - £600 PFH", "Paid", 
-         "Live pre-filtered LinkedIn search dork for 'Voiceover Casting', 'Voice Actor Needed', and 'Voice Artist Needed'.", 
+         "Direct LinkedIn search for corporate and commercial voiceover job listings.", 
          "Any", "25-50", "RP, British Indian, West Midlands", "Warm, Articulate, Corporate"),
 
         (user_id, "Voice Over Market Open Calls", "VO Market Roster", "Voice Over Market", 
          "Commercial Print/Modeling", today_str, str(today + timedelta(days=12)),
-         "🌍 Worldwide Remote", "Direct Web Application", "", "https://www.google.com/search?q=site:voiceovermarket.co.uk+%22casting+call%22+OR+%22voice+actor%22", 
+         "🌍 Worldwide Remote", "Direct Web Application", "", vo_market_url, 
          "Commercial Rates", "Paid", 
-         "Open public casting board search dork for commercial and broadcast opportunities.", 
+         "Direct intake and roster portal for commercial and broadcast opportunities.", 
          "Any", "20-45", "RP, General British", "Commercial, Clear"),
 
         (user_id, "Voice Acting Alliance Open Castings", "VAA Community Board", "Voice Acting Alliance", 
          "Theatre/Stage", today_str, str(today + timedelta(days=14)),
-         "🌍 Worldwide Remote", "Direct Web Application", "", "https://www.google.com/search?q=site:facebook.com/groups/voiceactingallianceunofficialgroup+%22casting+call%22", 
+         "🌍 Worldwide Remote", "Direct Web Application", "", vaa_facebook_url, 
          "Indie / Commercial", "Paid", 
-         "Public open casting threads and community audio drama auditions.", 
+         "Direct link to Voice Acting Alliance Facebook group for community auditions.", 
          "Any", "18-45", "RP, General British", "Character, Dramatic")
     ]
 
@@ -288,7 +293,7 @@ def fetch_live_casting_opportunities(user_id):
     return scraped_jobs
 
 # -----------------------------------------------------------------------------
-# 5. UNIFIED RESOURCE VAULT DATABASE (62 VERIFIED REAL SPREADSHEET ENTRIES)
+# 5. UNIFIED RESOURCE VAULT DATABASE (62 VERIFIED SPREADSHEET ENTRIES)
 # -----------------------------------------------------------------------------
 VAULT_FULL_DATA = [
     {"Name": "Actor's Access", "Resource Type": "Pay-to-Play (see: Notes for $)", "Work Type": "General voiceover, on-camera, theatre", "Demo Required": "No", "Notes": "Subscription $68/yr; Demo encouraged but not required; Check breakdowns to see if a job is voiceover or other", "Link": "https://actorsaccess.com/"},
@@ -802,8 +807,6 @@ Spotlight Profile: {u_spotlight}{gdpr_footer}"""
 
             if view_mode == "📊 Interactive Table View":
                 df_vault = pd.DataFrame(filtered_vault)
-                
-                # Reorder columns for clean display
                 cols_order = ["Name", "Resource Type", "Work Type", "Demo Required", "Notes", "Link"]
                 df_vault = df_vault[cols_order]
 

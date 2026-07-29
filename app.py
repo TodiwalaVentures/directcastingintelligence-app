@@ -151,10 +151,10 @@ def sanitize_url(url: str) -> str:
     return "#"
 
 # -----------------------------------------------------------------------------
-# 4. MASTER MULTI-SOURCE LIVE SCRAPING & PRECISION DORK ENGINE
+# 4. MASTER MULTI-SOURCE LIVE SCRAPING & EXPANDED PRECISION DORK ENGINE
 # -----------------------------------------------------------------------------
 def fetch_live_casting_opportunities(user_id):
-    """Executes live network requests and precision dork generation across all targeted sources."""
+    """Executes live network requests and expanded precision dork generation across all targeted sources."""
     scraped_jobs = []
     today = datetime.now().date()
     today_str = str(today)
@@ -198,11 +198,16 @@ def fetch_live_casting_opportunities(user_id):
     except Exception:
         pass
 
-    # 3. LIVE SCRAPE: Reddit Audio & Casting Feeds (r/recordthis, r/VoiceActing, r/CastingSeeks)
+    # 3. LIVE SCRAPE: Reddit Audio & Casting Feeds (EXPANDED KEYWORD FILTERING)
     reddit_subs = ["recordthis", "VoiceActing", "CastingSeeks"]
+    reddit_keywords = [
+        'paid', 'casting', 'hiring', 'looking for', 'casting call', 
+        'voice actor', 'voice artist', 'voice actor needed', 'voice artist needed', 
+        'va needed', 'audition'
+    ]
     for sub in reddit_subs:
         try:
-            req = urllib.request.Request(f"https://www.reddit.com/r/{sub}/new.json?limit=2", headers=headers)
+            req = urllib.request.Request(f"https://www.reddit.com/r/{sub}/new.json?limit=4", headers=headers)
             with urllib.request.urlopen(req, timeout=3) as resp:
                 r_data = json.loads(resp.read().decode('utf-8'))
                 posts = r_data.get('data', {}).get('children', [])
@@ -211,7 +216,7 @@ def fetch_live_casting_opportunities(user_id):
                     r_title = pdata.get('title', 'Reddit Casting Query')
                     r_permalink = f"https://www.reddit.com{pdata.get('permalink', '')}"
                     r_text = pdata.get('selftext', 'Open casting query posted on Reddit.')[:250].strip()
-                    if any(kw in r_title.lower() or kw in r_text.lower() for kw in ['paid', 'casting', 'hiring', 'looking for']):
+                    if any(kw in r_title.lower() or kw in r_text.lower() for kw in reddit_keywords):
                         scraped_jobs.append((
                             user_id, f"[{sub.upper()}] {r_title[:70]}", f"Reddit User u/{pdata.get('author', 'Client')}", f"Reddit (/r/{sub})",
                             "Corporate/ELT" if sub == "recordthis" else "Animation", today_str, deadline_str,
@@ -222,7 +227,12 @@ def fetch_live_casting_opportunities(user_id):
         except Exception:
             pass
 
-    # 4. LIVE DIRECTORY CALLS & PRECISION SEARCH DORKS
+    # 4. LIVE DIRECTORY CALLS & EXPANDED PRECISION SEARCH DORKS
+    linkedin_dork_url = "https://www.linkedin.com/jobs/search/?keywords=%22voiceover%20casting%22%20OR%20%22voice%20actor%20needed%22%20OR%20%22voice%20artist%20needed%22%20OR%20%22casting%20call%22"
+    twitter_vac_dork_url = "https://x.com/search?q=(VACastingCallRT%20OR%20%23VACastingCall)%20(%22casting%20call%22%20OR%20%22voice%20actor%20needed%22)&f=live"
+    twitter_nsip_dork_url = "https://x.com/search?q=(%22No%20Studio%20in%20Particular%22%20OR%20NSIPStudio)%20(%22casting%20call%22%20OR%20%22voice%20actor%20needed%22)&f=live"
+    newgrounds_dork_url = "https://www.newgrounds.com/bbs/search/forum/23?glob=casting+call+voice+actor+needed"
+
     multi_directory_entries = [
         (user_id, "Speculative Fiction Audio Narrator", "khōréō Magazine", "khōréō", 
          "Audiobooks", today_str, str(today + timedelta(days=20)),
@@ -233,42 +243,42 @@ def fetch_live_casting_opportunities(user_id):
 
         (user_id, "Indie Game & Animation Voice Roster Search", "Newgrounds VA Community", "Newgrounds - Forum", 
          "Video Games", today_str, str(today + timedelta(days=14)),
-         "🌍 Worldwide Remote", "Direct Web Application", "", "https://www.newgrounds.com/bbs/forum/26", 
+         "🌍 Worldwide Remote", "Direct Web Application", "", newgrounds_dork_url, 
          "Variable / Indie Budget", "Paid", 
-         "Public Newgrounds voice acting casting threads and collaboration queries.", 
+         "Live targeted search for active Newgrounds voice actor casting calls and threads.", 
          "Any", "18-40", "General British, US", "Character, Energetic"),
 
-        (user_id, "Anime Dubbing Lead - Supporting Villain", "VA Casting Call RT", "VA Casting Call RT (Twitter/X)", 
+        (user_id, "Anime Dubbing & VO Calls Feed", "VA Casting Call RT", "VA Casting Call RT (Twitter/X)", 
          "Animation", today_str, str(today + timedelta(days=8)),
-         "🌍 Worldwide Remote", "Email", "auditions@nostudioinparticular.com", "https://x.com/search?q=VACastingCallRT%20casting&f=live", 
+         "🌍 Worldwide Remote", "Direct Web Application", "", twitter_vac_dork_url, 
          "$150 / Hour Studio Remote Rate", "Paid", 
-         "Live Twitter/X retweet feed for public open auditions and character voice queries.", 
+         "Live Twitter/X search dork targeting '#VACastingCall', 'Casting Call', and 'Voice Actor Needed'.", 
          "Male", "30-50", "RP, Mid-Atlantic", "Deep, Commanding, Gritty"),
 
-        (user_id, "Public Director Query & Short Film Casting", "No Studio in Particular", "No Studio in Particular (Twitter)", 
+        (user_id, "Public Director Query & Short Film Calls", "No Studio in Particular", "No Studio in Particular (Twitter)", 
          "Screen/Film/TV", today_str, str(today + timedelta(days=10)),
-         "🌍 Worldwide Remote", "Email", "hello@nostudioinparticular.com", "https://x.com/search?q=%22No%20Studio%20in%20Particular%22%20casting&f=live", 
+         "🌍 Worldwide Remote", "Direct Web Application", "", twitter_nsip_dork_url, 
          "£250 / Day Rate", "Paid", 
-         "Public Twitter/X casting posts and production queries for indie film and voice spots.", 
+         "Live search dork for indie studio casting calls, short films, and character voice actor queries.", 
          "Any", "25-40", "RP, London", "Dramatic, Natural"),
 
-        (user_id, "B2B Voice & Corporate Presenter Search", "LinkedIn Talent Dork Engine", "LinkedIn B2B Queries", 
+        (user_id, "B2B Voice & Corporate Presenter Calls", "LinkedIn Talent Dork Engine", "LinkedIn B2B Queries", 
          "Corporate/ELT", today_str, str(today + timedelta(days=15)),
-         "🇬🇧 UK Specific / Remote", "Direct Web Application", "", "https://www.linkedin.com/jobs/search/?keywords=voiceover%20casting", 
+         "🇬🇧 UK Specific / Remote", "Direct Web Application", "", linkedin_dork_url, 
          "£350 - £600 PFH", "Paid", 
-         "Live LinkedIn search query for active corporate, e-learning, and commercial voiceover job listings.", 
+         "Live pre-filtered LinkedIn search dork for 'Voiceover Casting', 'Voice Actor Needed', and 'Voice Artist Needed'.", 
          "Any", "25-50", "RP, British Indian, West Midlands", "Warm, Articulate, Corporate"),
 
         (user_id, "Voice Over Market Open Calls", "VO Market Roster", "Voice Over Market", 
          "Commercial Print/Modeling", today_str, str(today + timedelta(days=12)),
-         "🌍 Worldwide Remote", "Direct Web Application", "", "https://www.google.com/search?q=site:voiceovermarket.com+casting", 
+         "🌍 Worldwide Remote", "Direct Web Application", "", "https://www.google.com/search?q=site:voiceovermarket.co.uk+%22casting+call%22+OR+%22voice+actor%22", 
          "Commercial Rates", "Paid", 
-         "Open public casting board for commercial and broadcast opportunities.", 
+         "Open public casting board search dork for commercial and broadcast opportunities.", 
          "Any", "20-45", "RP, General British", "Commercial, Clear"),
 
         (user_id, "Voice Acting Alliance Open Castings", "VAA Community Board", "Voice Acting Alliance", 
          "Theatre/Stage", today_str, str(today + timedelta(days=14)),
-         "🌍 Worldwide Remote", "Direct Web Application", "", "https://www.google.com/search?q=Voice+Acting+Alliance+casting+call", 
+         "🌍 Worldwide Remote", "Direct Web Application", "", "https://www.google.com/search?q=site:facebook.com/groups/voiceactingallianceunofficialgroup+%22casting+call%22", 
          "Indie / Commercial", "Paid", 
          "Public open casting threads and community audio drama auditions.", 
          "Any", "18-45", "RP, General British", "Character, Dramatic")
@@ -278,7 +288,75 @@ def fetch_live_casting_opportunities(user_id):
     return scraped_jobs
 
 # -----------------------------------------------------------------------------
-# 5. AUTHENTICATION & ONBOARDING GATEKEEPER
+# 5. UNIFIED RESOURCE VAULT DATABASE (62 VERIFIED REAL SPREADSHEET ENTRIES)
+# -----------------------------------------------------------------------------
+VAULT_FULL_DATA = [
+    {"Name": "Actor's Access", "Resource Type": "Pay-to-Play (see: Notes for $)", "Work Type": "General voiceover, on-camera, theatre", "Demo Required": "No", "Notes": "Subscription $68/yr; Demo encouraged but not required; Check breakdowns to see if a job is voiceover or other", "Link": "https://actorsaccess.com/"},
+    {"Name": "ACX", "Resource Type": "Audiobook Casting Database", "Work Type": "Audiobooks", "Demo Required": "No", "Notes": "Sign up to audition; Books distributed on Audible, Amazon, and iTunes; STRONGLY suggest ensuring that job posters have rights to audiobook", "Link": "https://www.acx.com/"},
+    {"Name": "AhabTalent", "Resource Type": "Audiobook Casting Database", "Work Type": "Audiobooks", "Demo Required": "No", "Notes": "Sign up for audition matches to be emailed to you", "Link": "https://www.ahabtalent.com/"},
+    {"Name": "Amazing Voice", "Resource Type": "Studio Roster", "Work Type": "IVR, Narration", "Demo Required": "Yes (Commercial)", "Notes": "Requires commercial demo; 'We are not a Voice Talent Directory; our roster is limited to a select number of top professionals in the voiceover industry'", "Link": "https://www.amazingvoice.com/voice-talent-application"},
+    {"Name": "Backstage", "Resource Type": "Pay-to-Play (see: Notes for $)", "Work Type": "General voiceover, on-camera, theatre", "Demo Required": "No", "Notes": "Free to join; $16/mo (billed annually), $20/mo (billed bi-annually), $25/mo", "Link": "https://www.backstage.com/casting/?min_age=0&max_age=100&radius=50&page=1&sort_by=newest&job_type=vo&role_type=V"},
+    {"Name": "Blend Voices (previously GM Voices)", "Resource Type": "Studio Roster", "Work Type": "Variety—audiobooks, commercial, character, etc", "Demo Required": "Yes (Other/See Notes)", "Notes": "Submission form via website. Requires RAW studio sample. They expect a few years of experience. OFFERS AI VOICE SERVICES TO THEIR CLIENTS BUT CLEARLY COMMUNICATES WITH TALENT WHICH JOBS WILL AND WILL NOT BE USED TO SYNTHESIZE AI VOICIES.", "Link": "https://8c2l0ugidj4.typeform.com/to/LCrMeZNE?typeform-source=www.getblend.com"},
+    {"Name": "Blue Wave", "Resource Type": "Studio Roster", "Work Type": "Politcal voiceover", "Demo Required": "Yes (Other/See Notes)", "Notes": "Requires 'FULLY PRODUCED' POLITICAL demo; Not currently accepting talent but may reopen in the future; '[...] we do not accept unsolicited materials.'", "Link": "https://www.bluewavevoiceover.com/faqs/"},
+    {"Name": "Bodalgo", "Resource Type": "Pay-to-Play (see: Notes for $)", "Work Type": "Variety—audiobooks, commercial, character, etc", "Demo Required": "Yes (Other/See Notes)", "Notes": "BASED IN GERMANY; Accepts remote talent; 'Considers professionally trained actors only'; free to join; $245/yr premium", "Link": "https://www.bodalgo.com/en"},
+    {"Name": "CAS Music", "Resource Type": "Studio Roster", "Work Type": "Commercial, Narration", "Demo Required": "Yes (Commercial)", "Notes": "Requires commercial demo; 'Your name should not be heard in the demo file.'", "Link": "https://casmusic.com/voice-over-submissions/"},
+    {"Name": "Casting by Smile", "Resource Type": "Studio Roster", "Work Type": "Commercial & Corporate Narration", "Demo Required": "Yes (Other/See Notes)", "Notes": "BASED IN SWEDEN; Requires resume; Send up to 3 demos via their submission form", "Link": "https://www.studiosmile.se/contact"},
+    {"Name": "Casting Call Club - Discord", "Resource Type": "Discord Server", "Work Type": "Fan projects, original works", "Demo Required": "No", "Notes": "Requires Discord. Great for indie projects! Server has a great community", "Link": "https://t.co/WMzQA5iVro"},
+    {"Name": "Casting Call Club - Website", "Resource Type": "Networking & Auditions", "Work Type": "Fan projects, original works", "Demo Required": "No", "Notes": "Sign up and audition; Great for indie projects and newer voice actors; Paid subscription tiers available", "Link": "https://www.castingcall.club/"},
+    {"Name": "CastVoices", "Resource Type": "Pay-to-Play (see: Notes for $)", "Work Type": "Variety—audiobooks, commercial, character, etc", "Demo Required": "No", "Notes": "Free to join; $15/mo & $25/mo options. Does not affect audition order, only amount of demos and media allowed.", "Link": "https://castvoices.com/"},
+    {"Name": "Creative Media Design NYC", "Resource Type": "Studio Roster", "Work Type": "Variety—audiobooks, commercial, character, etc", "Demo Required": "Yes (Other/See Notes)", "Notes": "Can upload multiple demos; requires SC-Standard, ipDTL, Phone Patch, or ISDN", "Link": "https://www.cmdnyc.com/new-talent-form/"},
+    {"Name": "DevTalk", "Resource Type": "Discord Server", "Work Type": "Visual Novels", "Demo Required": "No", "Notes": "Discord required; Great for Visual Novel jams & passion projects; Doesn't require demo, but some devs will ask for them", "Link": "https://discord.com/invite/sWtQyxPBke?"},
+    {"Name": "Deyan Audio", "Resource Type": "Studio Roster", "Work Type": "Audiobooks", "Demo Required": "Yes (Other/See Notes)", "Notes": "Demo requirement not indicated but suggested. Submit materials in text form via submission form on Contact page", "Link": "https://deyanaudio.squarespace.com/contact"},
+    {"Name": "Dragonuk Connects", "Resource Type": "Networking & Auditions", "Work Type": "General voiceover, on-camera, theatre", "Demo Required": "No", "Notes": "U.S. Mid-Atlantic Region focused, but permits other regions to be selected. Demos are optional but highly suggested. Very on-camera heavy. Paid membership required to use forum, have a public profile, send and receive messages, and receive 'Special Profile Castings'", "Link": "https://www.dragonukconnects.com/home.php"},
+    {"Name": "DreamVoices", "Resource Type": "Audiobook Casting Database", "Work Type": "Audiobooks, Commercial", "Demo Required": "Yes (Other/See Notes)", "Notes": "Narration demo and/or commercial demo required; Looking to grow a diverse roster", "Link": "https://www.dreamempirefilms.com/voiceoversubmissions"},
+    {"Name": "Ear-Reality", "Resource Type": "Audiobook Casting Database", "Work Type": "Interactive Audiobooks", "Demo Required": "Yes (Other/See Notes)", "Notes": "BASED IN GERMANY; Submission page has been removed and replaced with a generic 'contact' form", "Link": "https://ear-reality.com/"},
+    {"Name": "Ear Works Media", "Resource Type": "Studio Roster", "Work Type": "Commercial, Narration", "Demo Required": "Yes (Commercial)", "Notes": "Requires commercial demo and Source Connect Standard OR Pro; Can record in-studio if located in the Virginia Beach, USA area; Requires quick turnarounds and open weekday availability", "Link": "https://www.earworks.com/voice-talent-application"},
+    {"Name": "Encore Voices", "Resource Type": "Studio Roster", "Work Type": "Dubbing", "Demo Required": "Yes (Character)", "Notes": "Submit through account system on their website", "Link": "https://talent.encorevoices.com/talent-registration/"},
+    {"Name": "Findaway Voices", "Resource Type": "Audiobook Casting Database", "Work Type": "Audiobooks", "Demo Required": "No", "Notes": "Sign up, create a profile, auditions will be sent to you based on profile and voice specifications", "Link": "https://findawayvoices.com/narrators"},
+    {"Name": "Graphic Audio", "Resource Type": "Audiobook Casting Database", "Work Type": "Audiobooks/Audio Drama (full cast)", "Demo Required": "Yes (Character)", "Notes": "Fill out the Google form, and the casting directors will review the submission within 1-2 months; 'Particular consideration will be given to animation and interactive demos that highlight acting and dialect work.'", "Link": "https://graphicaudio.zendesk.com/hc/en-us/articles/200766607-I-m-a-voice-actor-and-I-m-interested-in-working-for-GraphicAudio-"},
+    {"Name": "Halp Network", "Resource Type": "Studio Roster", "Work Type": "Video Games, PCAP/MOCAP", "Demo Required": "Yes (Other/See Notes)", "Notes": "No demo required in submission, but should have a character demo on your website.", "Link": "https://airtable.com/shrJEs3NswRmy3pZ8"},
+    {"Name": "Holdcom", "Resource Type": "Studio Roster", "Work Type": "IVR, Narration", "Demo Required": "Yes (Commercial)", "Notes": "Record their script to submit; Requires 24 hour turnaround fulfillment AND home studio; Scripts in English, Spanish, Italian, German, and French", "Link": "https://www.holdcom.com/voice-talent-audition/"},
+    {"Name": "JL Studios", "Resource Type": "Studio Roster", "Work Type": "Commercial, Narration", "Demo Required": "No", "Notes": "Complete submission form with booth description and voice description.", "Link": "https://jlstudios.ca/formmailer4/voice_demo_submission.php"},
+    {"Name": "khōréō", "Resource Type": "Studio Roster", "Work Type": "Audiobooks/Podcasts", "Demo Required": "No", "Notes": "No experience or demo required; Requests confirmation that applicant identifies as an immigrant/diaspora actor", "Link": "https://www.khoreomag.com/voice-actors/"},
+    {"Name": "Kocha Sound", "Resource Type": "Studio Roster", "Work Type": "Character (Animation, Anime, etc)", "Demo Required": "Yes (Character)", "Notes": "Requires character/animation demo; click 'submit here'; NO REPEAT SUBMISIONS!", "Link": "http://www.kochasound.com/contact-us/"},
+    {"Name": "Lau Lapides/MCVO", "Resource Type": "Roster/Freelance Agent", "Work Type": "Commercial", "Demo Required": "Yes (Commercial)", "Notes": "Requires commercial demo; freelance agency--will send auditions and represent if job is booked; REQUIRES SOURCE CONNECT STANDARD", "Link": "https://laulapidescompany.com/service/audition-submission-information/"},
+    {"Name": "Lotas Productions", "Resource Type": "Studio Roster", "Work Type": "Commercial, Promo", "Demo Required": "No", "Notes": "To apply, navigate 'Voices' > 'Submit your demo'. SUBMISSION LINK HAS BEEN REMOVED AT THIS TIME. THIS STUDIO OFFERS AI (SYNTHETIC VOICE) SOLUTIONS TO CLIENTS.", "Link": "https://www.lotasproductions.com/"},
+    {"Name": "Network Nexus Studios", "Resource Type": "Studio Roster", "Work Type": "Variety—audiobooks, commercial, character, etc", "Demo Required": "Yes (Other/See Notes)", "Notes": "To apply, navigate 'Careers' > 'Talent Pool Application Form'", "Link": "https://www.networknexusstudios.com/"},
+    {"Name": "Newgrounds - Forum", "Resource Type": "Networking & Auditions", "Work Type": "Fan projects, original works", "Demo Required": "No", "Notes": "Forum for opportunities; Great for indie projects and newer voice actors", "Link": "https://www.newgrounds.com/bbs/forum/23"},
+    {"Name": "No Studio in Particular", "Resource Type": "Indie Studio Mailing List", "Work Type": "Character, Narration", "Demo Required": "Yes (Character)", "Notes": "Mailing list for No Studio in Particular; casting calls are posted to their social media, Discord, and sent to this mailing list", "Link": "https://docs.google.com/forms/d/e/1FAIpQLScLrNPF5iM1eGiKtev29v2LO2VQH68BUvqvFa7xnCm9UVjgIQ/viewform"},
+    {"Name": "No Studio in Particular - Twitter", "Resource Type": "Twitter Account", "Work Type": "Character, Narration", "Demo Required": "No", "Notes": "Public casting calls sourced on behalf of clients, freelance service; has a community for voice actors", "Link": "https://twitter.com/NSIPStudio"},
+    {"Name": "Online Voice Actor Affiliation", "Resource Type": "Facebook Group", "Work Type": "Variety—audiobooks, commercial, character, etc", "Demo Required": "No", "Notes": "Requires Facebook; FB group by Morgan Berry", "Link": "https://www.facebook.com/groups/OnlineVoiceActorsActresses/"},
+    {"Name": "ProComm Voices", "Resource Type": "Studio Roster", "Work Type": "Commercial", "Demo Required": "Yes (Commercial)", "Notes": "Requires commercial demo; REQUIRES SOURCE CONNECT STANDARD", "Link": "https://www.procommvoices.com/request-to-join-the-procomm-roster/"},
+    {"Name": "produb", "Resource Type": "Dubbing App", "Work Type": "Dubbing", "Demo Required": "Yes (Other/See Notes)", "Notes": "Requires app to be downloaded on your mobile device; Your application must be approved to submit to available jobs; Samples or demos required in order for your application to be approved", "Link": "https://produb.app/"},
+    {"Name": "Royal Guard Publishing", "Resource Type": "Audiobook Casting Database", "Work Type": "Audiobooks", "Demo Required": "Yes (Other/See Notes)", "Notes": "See submission information under 'Narrator'; requests samples, website link, rates, and comfort level with adult content", "Link": "https://royalguardpublishing.com/submissions/"},
+    {"Name": "Sound Cadence Studios", "Resource Type": "Studio Roster", "Work Type": "Character (Animation, Anime, etc)", "Demo Required": "Yes (Character)", "Notes": "Requires character/animation demo; click New Actor Submission Form; DO NOT RESUBMIT SAME INFO!", "Link": "https://www.soundcadencestudios.com/"},
+    {"Name": "Studio Center", "Resource Type": "Studio Roster", "Work Type": "Commercial, Promo", "Demo Required": "Yes (Commercial)", "Notes": "NOTE: EXCLUSIVE ROSTER. You are not allowed to be on any other rosters, P2P websites, or receive auditions from agents or managers. NOT CURRENTLY ACCEPTING APPLICATIONS", "Link": "https://studiocenter.com/about/jobs/voice-talent-application"},
+    {"Name": "Studio Coattails", "Resource Type": "Studio Roster", "Work Type": "Character (Visual Novels, Videogames)", "Demo Required": "Yes (Character)", "Notes": "Fill out google form. Requires character demo.", "Link": "https://studiocoattails.com/services/for-voice-talent/"},
+    {"Name": "Studio Nano", "Resource Type": "Studio Roster", "Work Type": "Character (Animation, Anime, etc)", "Demo Required": "Yes (Character)", "Notes": "Requires character/animation demo; click big, red button for submission form", "Link": "https://studionano.com/contact-us"},
+    {"Name": "Studio Topaz", "Resource Type": "Studio Roster", "Work Type": "Commercial & Character", "Demo Required": "Yes (Other/See Notes)", "Notes": "PREVIOUSLY EXTRA TERRIBILE/TIGER MESA; 'Get In Touch' Button at top of page, then fill out contact form.", "Link": "https://www.studiotopaz.com/"},
+    {"Name": "TYDEF Studios", "Resource Type": "Studio Roster", "Work Type": "Audiobooks", "Demo Required": "Yes (Other/See Notes)", "Notes": "Fill out form, submit up to 3 narration samples and headshot.", "Link": "https://www.tydefstudios.com/actor-roster-signup"},
+    {"Name": "VA Casting Call RT", "Resource Type": "Twitter Account", "Work Type": "Retweets paid casting calls on Twitter", "Demo Required": "No", "Notes": "Turn on Tweet notifications to be pinged when a paid casting call is retweeted", "Link": "https://twitter.com/VACastingRT"},
+    {"Name": "Very Berry Studios", "Resource Type": "Indie Studio Mailing List", "Work Type": "Character", "Demo Required": "No", "Notes": "Mailing list for Verry Berry Studios; casting calls are posted to their social media, Discord, and sent to this mailing list. DO NOT SUBMIT VIA CONTACT FORM. Follow link that says 'roster' under contact form.", "Link": "https://veryberrystudios.com/"},
+    {"Name": "VO Planet", "Resource Type": "Pay-to-Play (see: Notes for $)", "Work Type": "Variety—audiobooks, commercial, character, etc", "Demo Required": "Yes (Other/See Notes)", "Notes": "Requires subscription; $199/yr", "Link": "https://www.voplanet.com/cta-page/register"},
+    {"Name": "Voice Acting Alliance", "Resource Type": "Facebook Group", "Work Type": "Variety—audiobooks, commercial, character, etc", "Demo Required": "No", "Notes": "Requires Facebook; FB group by Morgan Berry; great community!", "Link": "https://www.facebook.com/groups/voiceactingallianceunofficialgroup/"},
+    {"Name": "Voice Acting Club (VAC)  - Forum", "Resource Type": "Networking & Auditions", "Work Type": "Variety—audiobooks, commercial, character, etc", "Demo Required": "No", "Notes": "Forum for opportunities; great community!", "Link": "https://voiceacting.boards.net/"},
+    {"Name": "Voice Acting Club (VAC) - Discord", "Resource Type": "Discord Server", "Work Type": "Variety—audiobooks, commercial, character, etc", "Demo Required": "No", "Notes": "Requires Discord; Great for indie projects & welcoming community!", "Link": "https://t.co/Z4GZv91vS2"},
+    {"Name": "Voice Acting Club (VAC) - Facebook", "Resource Type": "Facebook Group", "Work Type": "Variety—audiobooks, commercial, character, etc", "Demo Required": "No", "Notes": "Requires Facebook; FB group by Kira Buckland & VAC; great community!", "Link": "https://www.facebook.com/groups/voiceactingclub/"},
+    {"Name": "Voice Crafters", "Resource Type": "Casting Website", "Work Type": "Commercial", "Demo Required": "Yes (Commercial)", "Notes": "'For a (very) limited time, Voice Crafters will accept new US and UK voice talent.'; requires 5+ years of commercial experience", "Link": "https://www.voicecrafters.com/"},
+    {"Name": "Voice Over Market", "Resource Type": "Pay-to-Play (see: Notes for $)", "Work Type": "Variety—audiobooks, commercial, character, etc", "Demo Required": "Yes (Other/See Notes)", "Notes": "BASED IN THE UK; Requires subscription of €50/yr; Can book a studio for you in the UK if needed. Demos strongly suggested.", "Link": "https://www.voiceovermarket.co.uk/registertalent"},
+    {"Name": "Voice Talent Online", "Resource Type": "Casting Website", "Work Type": "Variety—audiobooks, commercial, character, etc", "Demo Required": "Yes (Other/See Notes)", "Notes": "BASED IN THE UK; Fill out form and they will follow up requesting more info; Demos likely required", "Link": "https://www.voicetalentonline.com/join/"},
+    {"Name": "Voice Talent Warehouse", "Resource Type": "Casting Website", "Work Type": "Variety—audiobooks, commercial, character, etc", "Demo Required": "Yes (Other/See Notes)", "Notes": "Upload any demos you may have via their form; click 'Interested in Joining our Roster?'", "Link": "https://voicetalentwarehouse.com/contact/"},
+    {"Name": "Voiceover Cafe", "Resource Type": "Studio Roster", "Work Type": "Commercial, Corporate, and Character", "Demo Required": "Yes (Other/See Notes)", "Notes": "BASED IN UK; Localization studio; Email demos, rates, bio, headshot, playing range, and any brands or corporate clients from the past 2 years to hello@voiceover.cafe", "Link": "http://www.voiceover.cafe/about-us/voiceover-service/talent-submissions-join-our-2022-freelance-voiceover-roster/"},
+    {"Name": "VoiceProductions", "Resource Type": "Casting Website", "Work Type": "Variety—commercial, narration, character, etc", "Demo Required": "Yes (Other/See Notes)", "Notes": "BASED IN BELGIUM; profile will need to be accepted in order to be provided with direct bookings (no auditons); asks for a variety of demos but requires at least three", "Link": "https://www.voiceproductions.com/en/registration-voice-actor"},
+    {"Name": "Voices123", "Resource Type": "Pay-to-Play (see: Notes for $)", "Work Type": "Variety—audiobooks, commercial, character, etc", "Demo Required": "No", "Notes": "Subscription tiers from $299/yr to $2k+ per year; Audition for jobs you are invited to; Demos are not required but suggested", "Link": "https://voice123.com/plans"},
+    {"Name": "Voquent", "Resource Type": "Casting Website", "Work Type": "Variety—audiobooks, commercial, character, etc", "Demo Required": "No", "Notes": "Sign up to receive auditions based on profile and voice specifications. Optional paid features.", "Link": "https://www.voquent.com/"},
+    {"Name": "VSI Group", "Resource Type": "Studio Roster", "Work Type": "Dubbing", "Demo Required": "No", "Notes": "Demo not required, but highly suggested. Form asks for a sample of your work; click 'Freelancers'", "Link": "https://www.vsi.tv/contact"},
+    {"Name": "Wehear", "Resource Type": "Audiobook Production", "Work Type": "Audiobooks", "Demo Required": "Yes (Other/See Notes)", "Notes": "Demo type not indicated; 'Name Your Own Rate'; follow instructions on link to submit", "Link": "https://wehearfm.com/narrator-program"},
+    {"Name": "Zoo Digital", "Resource Type": "Studio Roster", "Work Type": "Dubbing", "Demo Required": "Yes (Other/See Notes)", "Notes": "Requests demos, does not specify what kind", "Link": "https://www.zoodigital.com/freelance-vacancies/voice-actor/"}
+]
+
+# -----------------------------------------------------------------------------
+# 6. AUTHENTICATION & ONBOARDING GATEKEEPER
 # -----------------------------------------------------------------------------
 if 'logged_in' not in st.session_state:
     st.session_state['logged_in'] = False
@@ -492,7 +570,7 @@ else:
                     if u_pay == "Paid Work Only" and pay_type == "Unpaid Opportunity": continue
                     if u_pay == "Unpaid Opportunities Only (Reel Building / Festival)" and pay_type == "Paid": continue
 
-                    # SOFT VOCAL STYLE MATCHING (NEVER HIDES UNLESS STRICT CHECKED)
+                    # SOFT VOCAL STYLE MATCHING
                     user_default_style = u_desc.lower() if u_desc else ""
                     req_style_clean = req_style.lower()
                     
@@ -688,31 +766,78 @@ Spotlight Profile: {u_spotlight}{gdpr_footer}"""
                 st.markdown(f'<a href="{mailto_cmd}" target="_blank"><button style="background-color:#2563EB;color:white;border:none;padding:12px 24px;border-radius:6px;cursor:pointer;font-weight:bold;width:100%;">✉️ Launch Email in Mail App / Outlook</button></a>', unsafe_allow_html=True)
 
         # ---------------------------------------------------------------------
-        # TAB 4: UNIFIED RESOURCE & AGENCY INTAKE VAULT
+        # TAB 4: UNIFIED RESOURCE & AGENCY INTAKE VAULT (CLICKABLE DIRECTORY)
         # ---------------------------------------------------------------------
         with tabs[3]:
             st.header("📚 Tab 4: Unified Resource & Agency Intake Vault")
-            st.caption("Ungated roster submission forms, audiobook portals, and dubbing intake links.")
-            
-            vault_data = [
-                {"Category": "Audiobook Publisher Intake", "Name": "AhabTalent (Penguin Random House)", "Submission Type": "Direct Roster Form", "Action": "Submit Narrator Reel & Specs"},
-                {"Category": "Audiobook Publisher Intake", "Name": "Deyan Audio", "Submission Type": "Direct Roster Form", "Action": "Submit Audio Samples"},
-                {"Category": "Audiobook Publisher Intake", "Name": "Graphic Audio", "Submission Type": "Direct Roster Form", "Action": "Submit Character Reel"},
-                {"Category": "Audiobook Publisher Intake", "Name": "Royal Guard Publishing", "Submission Type": "Direct Roster Form", "Action": "Narrator Onboarding Form"},
-                {"Category": "Audiobook Publisher Intake", "Name": "ACX (Audible/Amazon)", "Submission Type": "Free Account Portal", "Action": "Create Narrator Profile"},
-                {"Category": "Audiobook Publisher Intake", "Name": "Findaway Voices (Spotify)", "Submission Type": "Free Account Portal", "Action": "Create Distribution Profile"},
-                {"Category": "Anime & Gaming Dubbing", "Name": "Studio Nano", "Submission Type": "Agency Intake Form", "Action": "Submit Character Reel"},
-                {"Category": "Anime & Gaming Dubbing", "Name": "Sound Cadence Studios", "Submission Type": "Agency Intake Form", "Action": "Dubbing Roster Application"},
-                {"Category": "Anime & Gaming Dubbing", "Name": "Kocha Sound", "Submission Type": "Agency Intake Form", "Action": "Submit Gaming Samples"},
-                {"Category": "Anime & Gaming Dubbing", "Name": "Zoo Digital", "Submission Type": "Global Localization Portal", "Action": "Apply to Dubbing Roster"},
-                {"Category": "Anime & Gaming Dubbing", "Name": "VSI Group", "Submission Type": "Global Localization Portal", "Action": "Submit Localization Application"},
-                {"Category": "Commercial & Corporate Roster", "Name": "Studio Center", "Submission Type": "Studio Application", "Action": "Submit Commercial Reel"},
-                {"Category": "Commercial & Corporate Roster", "Name": "Voiceover Cafe UK", "Submission Type": "Agency Roster Form", "Action": "Submit UK Voice Specs"},
-                {"Category": "Commercial & Corporate Roster", "Name": "Voice Crafters", "Submission Type": "Curated Roster Form", "Action": "Apply to Voice Roster"},
-                {"Category": "Commercial & Corporate Roster", "Name": "Voquent", "Submission Type": "Free Platform Profile", "Action": "Create Voice Profile"}
-            ]
-            df_vault = pd.DataFrame(vault_data)
-            st.dataframe(df_vault, use_container_width=True)
+            st.caption("All 62 verified roster submission forms, agency portals, audiobook databases, and intake links from your database.")
+
+            # Search & Filter Controls
+            sc1, sc2, sc3 = st.columns([2, 1, 1])
+            with sc1:
+                search_query = st.text_input("🔍 Search Vault by Name or Keywords:", value="", placeholder="e.g. Graphic Audio, Audiobook, Studio Roster...")
+            with sc2:
+                all_res_types = ["All Types"] + sorted(list(set(r["Resource Type"] for r in VAULT_FULL_DATA)))
+                selected_res_type = st.selectbox("Resource Type", all_res_types)
+            with sc3:
+                all_demo_reqs = ["All Requirements"] + sorted(list(set(r["Demo Required"] for r in VAULT_FULL_DATA)))
+                selected_demo_req = st.selectbox("Demo Required?", all_demo_reqs)
+
+            # Filter Logic
+            filtered_vault = []
+            for item in VAULT_FULL_DATA:
+                m_q = search_query.lower()
+                matches_search = not m_q or (m_q in item["Name"].lower() or m_q in item["Work Type"].lower() or m_q in item["Notes"].lower())
+                matches_res = (selected_res_type == "All Types") or (item["Resource Type"] == selected_res_type)
+                matches_demo = (selected_demo_req == "All Requirements") or (item["Demo Required"] == selected_demo_req)
+                
+                if matches_search and matches_res and matches_demo:
+                    filtered_vault.append(item)
+
+            st.write(f"Showing **{len(filtered_vault)}** of **{len(VAULT_FULL_DATA)}** verified intake portals")
+
+            view_mode = st.radio("View Mode:", ["📊 Interactive Table View", "📱 Interactive Cards View"], horizontal=True)
+
+            st.divider()
+
+            if view_mode == "📊 Interactive Table View":
+                df_vault = pd.DataFrame(filtered_vault)
+                
+                # Reorder columns for clean display
+                cols_order = ["Name", "Resource Type", "Work Type", "Demo Required", "Notes", "Link"]
+                df_vault = df_vault[cols_order]
+
+                st.dataframe(
+                    df_vault,
+                    column_config={
+                        "Name": st.column_config.TextColumn("Directory / Agency", width="medium"),
+                        "Resource Type": st.column_config.TextColumn("Resource Category", width="small"),
+                        "Work Type": st.column_config.TextColumn("Work Disciplines", width="medium"),
+                        "Demo Required": st.column_config.TextColumn("Demo Req.", width="small"),
+                        "Notes": st.column_config.TextColumn("Submission Notes & Requirements", width="large"),
+                        "Link": st.column_config.LinkColumn(
+                            "Intake Link / Portal",
+                            help="Click to open the intake form directly in a new tab",
+                            validate="^https?://",
+                            display_text="🔗 Open Intake Portal",
+                            width="medium"
+                        )
+                    },
+                    hide_index=True,
+                    use_container_width=True
+                )
+
+            else:  # Interactive Cards View
+                for item in filtered_vault:
+                    clean_link = sanitize_url(item["Link"])
+                    with st.expander(f"📚 {item['Name']} — {item['Resource Type']} ({item['Work Type']})"):
+                        c_col1, c_col2 = st.columns([3, 1])
+                        with c_col1:
+                            st.write(f"**Work Disciplines:** `{item['Work Type']}`")
+                            st.write(f"**Demo Requirement:** `{item['Demo Required']}`")
+                            st.write(f"**Notes & Requirements:** {item['Notes']}")
+                        with c_col2:
+                            st.markdown(f'<a href="{clean_link}" target="_blank"><button style="background-color:#2563EB;color:white;border:none;padding:12px 18px;border-radius:6px;cursor:pointer;width:100%;font-weight:bold;margin-top:10px;">🔗 Open Intake Portal</button></a>', unsafe_allow_html=True)
 
         # ---------------------------------------------------------------------
         # TAB 5: SPOTLIGHT PROFILE & GDPR PRIVACY CONTROLS (CORRECTED UPDATE)

@@ -184,7 +184,118 @@ def scrape_voice_acting_club(logs):
         except Exception as e:
             logs.append(f"{source_label}: {str(e)}")
     return opportunities
+def scrape_reddit_rss(logs):
+    """Scrapes expanded list of community subreddits via RSS feeds."""
+    subreddits = [
+        "recordthis", "VoiceActing", "voiceover", "INAT", 
+        "AudioDrama", "acting", "gamedev", "LetsPlay"
+    ]
+    opportunities = []
+    keywords = [
+        "casting", "hiring", "paid", "va needed", "voice artist", 
+        "voice actor", "looking for voice", "seeking voice", 
+        "seeking narrator", "vo casting", "voiceover", "audition"
+    ]
+    
+    for sub in subreddits:
+        source_label = f"Reddit /r/{sub}"
+        url = f"https://www.reddit.com/r/{sub}/new/.rss"
+        try:
+            res = requests.get(url, headers=SCRAPER_HEADERS, timeout=10)
+            if res.status_code != 200:
+                logs.append(f"{source_label}: HTTP Error {res.status_code}")
+                continue
+            soup = BeautifulSoup(res.content, "html.parser")
+            for entry in soup.find_all("entry"):
+                title_elem = entry.find("title")
+                link_elem = entry.find("link")
+                updated_elem = entry.find("updated")
+                if title_elem:
+                    title = title_elem.get_text().strip()
+                    if any(kw in title.lower() for kw in keywords):
+                        link = link_elem["href"] if link_elem and "href" in link_elem.attrs else f"https://reddit.com/r/{sub}"
+                        date_str = updated_elem.get_text()[:10] if updated_elem else "Recent"
+                        pay_type = "Paid" if any(w in title.lower() for w in ["paid", "$", "£", "hiring"]) else "Unpaid Opportunity"
+                        
+                        opportunities.append({
+                            "title": title[:100],
+                            "company": f"Reddit /r/{sub} Poster",
+                            "source": source_label,
+                            "category": "Audiobooks" if sub == "AudioDrama" else ("Screen/Film/TV" if sub in ["acting", "gamedev"] else "Voice Acting"),
+                            "posted_date": date_str,
+                            "apply_url": link,
+                            "pay_type": pay_type,
+                            "rate_budget": "Paid Role" if pay_type == "Paid" else "Community Call",
+                            "job_desc": f"{title}\n\n[REQ_METADATA|Sex:Any|Age:20-50|Accents:Any|Style:Conversational]"
+                        })
+        except Exception as e:
+            logs.append(f"{source_label}: {str(e)}")
+    return opportunities
 
+
+def scrape_open_web_search(logs):
+    """Scrapes Twitter/X, targeted Reddit queries, open platforms, and directory boards."""
+    opportunities = []
+    queries = [
+        ("Twitter / X (@VACastingCallRT & Hashtags)", '(site:x.com OR site:twitter.com) (VACastingCallRT OR "#voiceoverjob" OR "#voiceactingjob" OR "#VOcastingcall" OR "voice actor needed")'),
+        ("Reddit Search Queries", 'site:reddit.com ("voice actor needed" OR "VO casting" OR "looking for a voice actor" OR "seeking voice talent" OR "seeking narrator")'),
+        ("LinkedIn Open Call", 'site:linkedin.com/posts ("voice artist" OR "voice actor" OR "voice casting")'),
+        ("Bluesky Network Call", 'site:bsky.app/profile ("voice artist" OR "voice actor" OR "voice casting")'),
+        ("Casting Call Club", 'site:castingcall.club/projects OR site:castingcall.club/find_jobs ("voice actor" OR "casting call" OR "audition")'),
+        ("Upwork Freelance Jobs", 'site:upwork.com/freelance-jobs ("voice over" OR "voice actor" OR "voiceover")'),
+        ("PeoplePerHour Jobs", 'site:peopleperhour.com/freelance-jobs ("voice over" OR "voiceover" OR "voice actor")'),
+        ("Freelancer & ACX Jobs", 'site:freelancer.com/jobs OR site:freelancer.com/job-search ("voice over" OR "acx" OR "voiceover")'),
+        ("Guru Jobs", 'site:guru.com/d/jobs ("voice over" OR "voiceover")'),
+        ("Twine & Behance Boards", 'site:twine.net/jobs OR site:twine.net/find OR site:behance.net/joblist ("voice over" OR "voice actor" OR "voiceover")'),
+        ("Fiverr Open Calls", 'site:fiverr.com ("voice over" OR "voice actor" OR "voice artist")'),
+    ]
+
+    for label, search_query in queries:
+        url = f"https://html.duckduckgo.com/html/?q={urllib.parse.quote(search_query)}"
+        try:
+            res = requests.get(url, headers=SCRAPER_HEADERS, timeout=10)
+            if res.status_code != 200:
+                logs.append(f"{label}: HTTP Error {res.status_code}")
+                continue
+                
+            soup = BeautifulSoup(res.text, "html.parser")
+            results = soup.find_all("div", class_="result__body")
+
+            for result in results:
+                title_elem = result.find("a", class_="result__url")
+                snippet_elem = result.find("a", class_="result__snippet")
+
+                if title_elem and snippet_elem:
+                    snippet = snippet_elem.get_text().strip()
+                    raw_link = title_elem["href"]
+
+                    if "uddg=" in raw_link:
+                        raw_link = urllib.parse.unquote(raw_link.split("uddg=")[1].split("&")[0])
+
+                    category_tag = "Voice Acting"
+                    if "linkedin" in raw_link or "behance" in raw_link:
+                        category_tag = "Commercial Print/Modeling"
+                    elif "upwork" in raw_link or "peopleperhour" in raw_link or "guru" in raw_link:
+                        category_tag = "Corporate/ELT"
+                    elif "x.com" in raw_link or "twitter.com" in raw_link:
+                        category_tag = "Animation"
+
+                    opportunities.append({
+                        "title": snippet[:120] + "...",
+                        "company": label,
+                        "source": label,
+                        "category": category_tag,
+                        "posted_date": datetime.now().strftime("%Y-%m-%d"),
+                        "apply_url": raw_link,
+                        "pay_type": "Paid" if any(w in snippet.lower() for w in ["paid", "$", "£", "fee", "budget"]) else "Unpaid Opportunity",
+                        "rate_budget": "Open Rate / See Listing",
+                        "job_desc": f"{snippet}\n\n[REQ_METADATA|Sex:Any|Age:25-45|Accents:RP, General British|Style:Warm, Articulate]"
+                    })
+        except Exception as e:
+            logs.append(f"{label}: {str(e)}")
+
+    return opportunities
+    
 def scrape_reddit_rss(logs):
     subreddits = ["recordthis", "VoiceActing", "VoiceOver", "INAT", "AudioDrama"]
     opportunities = []

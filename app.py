@@ -155,10 +155,10 @@ def sanitize_url(url: str) -> str:
     return "#"
 
 # -----------------------------------------------------------------------------
-# 4. DYNAMIC LIVE WEB SCRAPER ENGINE (ROBUST HTML PARSER ARCHITECTURE)
+# 4. DYNAMIC LIVE WEB SCRAPER ENGINE (BING & REDDIT ARCHITECTURE)
 # -----------------------------------------------------------------------------
 SCRAPER_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
 }
 
@@ -180,7 +180,6 @@ def scrape_reddit_old_rss(logs):
                 logs.append(f"{source_label}: HTTP Error {res.status_code}")
                 continue
                 
-            # Using html.parser instead of xml to prevent tree builder errors in cloud environments
             soup = BeautifulSoup(res.content, "html.parser")
             for entry in soup.find_all("entry"):
                 title_elem = entry.find("title")
@@ -209,9 +208,9 @@ def scrape_reddit_old_rss(logs):
     return opportunities
 
 
-def scrape_ddg_html(logs):
+def scrape_bing_html(logs):
     """
-    Uses standard DuckDuckGo HTML GET requests with robust headers to safely pull open directory listings.
+    Scrapes open casting opportunities using Bing HTML search to avoid DuckDuckGo 202 blocks.
     """
     opportunities = []
     
@@ -226,9 +225,9 @@ def scrape_ddg_html(logs):
     spam_keywords = ["business phone", "google voice", "voip", "telephone", "customer service"]
 
     for label, search_query in queries:
-        url = f"https://html.duckduckgo.com/html/?q={urllib.parse.quote(search_query)}"
+        url = f"https://www.bing.com/search?q={urllib.parse.quote(search_query)}"
         try:
-            time.sleep(2.0)
+            time.sleep(2.5)
             res = requests.get(url, headers=SCRAPER_HEADERS, timeout=12)
             
             if res.status_code != 200:
@@ -236,49 +235,43 @@ def scrape_ddg_html(logs):
                 continue
                 
             soup = BeautifulSoup(res.text, "html.parser")
-            results = soup.find_all("div", class_="result__body")
+            results = soup.find_all("li", class_="b_algo")
 
             for result in results:
-                title_elem = result.find("a", class_="result__url")
-                snippet_elem = result.find("a", class_="result__snippet")
+                title_elem = result.find("h2")
+                a_tag = title_elem.find("a") if title_elem else result.find("a")
+                snippet_elem = result.find("div", class_="b_caption") or result.find("p")
 
-                if title_elem and snippet_elem:
-                    snippet = snippet_elem.get_text().strip()
-                    raw_link = title_elem.get("href", "")
+                if a_tag:
+                    raw_link = a_tag.get("href", "")
+                    title_text = a_tag.get_text().strip()
+                    snippet_text = snippet_elem.get_text().strip() if snippet_elem else ""
+                    combined_text = f"{title_text} {snippet_text}".lower()
 
-                    if "uddg=" in raw_link:
-                        try:
-                            raw_link = urllib.parse.unquote(raw_link.split("uddg=")[1].split("&")[0])
-                        except Exception:
-                            pass
+                    if any(spam in combined_text for spam in spam_keywords):
+                        continue
+                    if any(x in raw_link.lower() for x in ["/login", "/signup", "/privacy", "/terms", "/pricing"]):
+                        continue
+                    if not any(valid in combined_text for valid in ["voice", "actor", "audition", "casting", "narrator", "vo"]):
+                        continue
                     
-                    if raw_link.startswith("http") and "duckduckgo" not in raw_link:
-                        title_lower = snippet.lower()
-
-                        if any(spam in title_lower for spam in spam_keywords):
-                            continue
-                        if any(x in raw_link.lower() for x in ["/login", "/signup", "/privacy", "/terms", "/pricing"]):
-                            continue
-                        if not any(valid in title_lower for valid in ["voice", "actor", "audition", "casting", "narrator", "vo"]):
-                            continue
-                        
-                        category_tag = "Voice Acting"
-                        if "linkedin" in raw_link:
-                            category_tag = "Corporate/ELT"
-                        
-                        is_paid = any(w in title_lower for w in pay_keywords)
-                        
-                        opportunities.append({
-                            "title": snippet[:100] + "...",
-                            "company": label,
-                            "source": "DDG Open Web",
-                            "category": category_tag,
-                            "posted_date": datetime.now().strftime("%Y-%m-%d"),
-                            "apply_url": raw_link,
-                            "pay_type": "Paid" if is_paid else "Unpaid Opportunity",
-                            "rate_budget": "Paid Role" if is_paid else "Open Rate / Community Call",
-                            "job_desc": f"Found via open directory search.\n\n[REQ_METADATA|Sex:Any|Age:25-45|Accents:RP, General British|Style:Warm, Articulate]"
-                        })
+                    category_tag = "Voice Acting"
+                    if "linkedin" in raw_link:
+                        category_tag = "Corporate/ELT"
+                    
+                    is_paid = any(w in combined_text for w in pay_keywords)
+                    
+                    opportunities.append({
+                        "title": title_text[:100] + "...",
+                        "company": label,
+                        "source": "Bing Open Web",
+                        "category": category_tag,
+                        "posted_date": datetime.now().strftime("%Y-%m-%d"),
+                        "apply_url": raw_link,
+                        "pay_type": "Paid" if is_paid else "Unpaid Opportunity",
+                        "rate_budget": "Paid Role" if is_paid else "Open Rate / Community Call",
+                        "job_desc": f"{snippet_text}\n\n[REQ_METADATA|Sex:Any|Age:25-45|Accents:RP, General British|Style:Warm, Articulate]"
+                    })
                     
         except Exception as e:
             logs.append(f"{label}: {str(e)}")
@@ -291,7 +284,7 @@ def run_all_scrapers():
     results = []
     
     results.extend(scrape_reddit_old_rss(logs))
-    results.extend(scrape_ddg_html(logs))
+    results.extend(scrape_bing_html(logs))
     
     seen_links = set()
     deduped = []

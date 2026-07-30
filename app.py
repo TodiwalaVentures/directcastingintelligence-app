@@ -155,171 +155,131 @@ def sanitize_url(url: str) -> str:
     return "#"
 
 # -----------------------------------------------------------------------------
-# 4. DYNAMIC LIVE WEB SCRAPER ENGINE (PROXY-BYPASS ARCHITECTURE)
+# 4. DYNAMIC LIVE WEB SCRAPER ENGINE (NATIVE BYPASS ARCHITECTURE)
 # -----------------------------------------------------------------------------
 SCRAPER_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-    "Accept": "application/json, text/xml, application/xml, text/html",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
 }
 
-def scrape_reddit_json(logs):
-    """Scrapes Reddit using native JSON routed through a free proxy to bypass 403 IP bans."""
+def scrape_reddit_old_rss(logs):
+    """Bypasses modern Reddit API 403 blocks by scraping old.reddit.com RSS feeds."""
     subreddits = ["VoiceActing", "RecordThis", "audiodrama"]
     opportunities = []
     keywords = ["casting", "hiring", "paid", "va needed", "voice artist", "voice actor", "looking for voice", "audition"]
     
+    # Spoofing a standard RSS Reader to bypass bot detection
+    rss_headers = {"User-Agent": "FeedFetcher-Google; (+http://www.google.com/feedfetcher.html)"}
+    
     for sub in subreddits:
         source_label = f"Reddit /r/{sub}"
-        # Route through AllOrigins raw proxy to bypass Reddit Datacenter IP blocks
-        target_url = urllib.parse.quote(f"https://www.reddit.com/r/{sub}/new.json?limit=20")
-        proxy_url = f"https://api.allorigins.win/raw?url={target_url}"
-        
+        url = f"https://old.reddit.com/r/{sub}/new/.rss"
         try:
-            time.sleep(1.0)
-            res = requests.get(proxy_url, headers=SCRAPER_HEADERS, timeout=15)
+            time.sleep(2.0)
+            res = requests.get(url, headers=rss_headers, timeout=12)
             if res.status_code != 200:
-                logs.append(f"{source_label}: Proxy HTTP Error {res.status_code}")
+                logs.append(f"{source_label}: HTTP Error {res.status_code}")
                 continue
                 
-            data = res.json()
-            posts = data.get("data", {}).get("children", [])
-            
-            for post in posts:
-                post_data = post.get("data", {})
-                title = post_data.get("title", "")
+            soup = BeautifulSoup(res.content, "xml")
+            for entry in soup.find_all("entry"):
+                title_elem = entry.find("title")
+                link_elem = entry.find("link")
                 
-                if any(kw in title.lower() for kw in keywords):
-                    link = "https://reddit.com" + post_data.get("permalink", f"/r/{sub}")
-                    pay_type = "Paid" if any(w in title.lower() for w in ["paid", "$", "£", "hiring"]) else "Unpaid Opportunity"
-                    
-                    opportunities.append({
-                        "title": title[:100] + "...",
-                        "company": f"Reddit /r/{sub} Poster",
-                        "source": source_label,
-                        "category": "Audiobooks" if sub == "audiodrama" else "Voice Acting",
-                        "posted_date": datetime.now().strftime("%Y-%m-%d"),
-                        "apply_url": link,
-                        "pay_type": pay_type,
-                        "rate_budget": "Paid Role" if pay_type == "Paid" else "Community Call",
-                        "job_desc": f"{title}\n\n[REQ_METADATA|Sex:Any|Age:20-50|Accents:Any|Style:Conversational]"
-                    })
+                if title_elem:
+                    title = title_elem.get_text().strip()
+                    if any(kw in title.lower() for kw in keywords):
+                        link = link_elem["href"] if link_elem else f"https://reddit.com/r/{sub}"
+                        pay_type = "Paid" if any(w in title.lower() for w in ["paid", "$", "£", "hiring"]) else "Unpaid Opportunity"
+                        
+                        opportunities.append({
+                            "title": title[:100] + "...",
+                            "company": f"Reddit /r/{sub} Poster",
+                            "source": source_label,
+                            "category": "Audiobooks" if sub == "audiodrama" else "Voice Acting",
+                            "posted_date": datetime.now().strftime("%Y-%m-%d"),
+                            "apply_url": link,
+                            "pay_type": pay_type,
+                            "rate_budget": "Paid Role" if pay_type == "Paid" else "Community Call",
+                            "job_desc": f"{title}\n\n[REQ_METADATA|Sex:Any|Age:20-50|Accents:Any|Style:Conversational]"
+                        })
         except Exception as e:
             logs.append(f"{source_label}: {str(e)}")
             
     return opportunities
 
 
-def scrape_upwork_rss(logs):
-    """Direct integration with Upwork's RSS feed via proxy to bypass Cloudflare 403 blocks."""
-    opportunities = []
-    target_url = urllib.parse.quote("https://www.upwork.com/ab/feed/jobs/rss?q=%22voice+over%22")
-    proxy_url = f"https://api.allorigins.win/raw?url={target_url}"
-    
-    try:
-        time.sleep(1.0)
-        res = requests.get(proxy_url, headers=SCRAPER_HEADERS, timeout=15)
-        if res.status_code != 200:
-            logs.append(f"Upwork RSS: Proxy HTTP Error {res.status_code}")
-            return opportunities
-            
-        soup = BeautifulSoup(res.content, "html.parser")
-        
-        for item in soup.find_all("item"):
-            title = item.find("title").get_text(strip=True) if item.find("title") else "Upwork VO Contract"
-            link = item.find("link").get_text(strip=True) if item.find("link") else ""
-            desc = item.find("description").get_text(strip=True) if item.find("description") else ""
-            
-            opportunities.append({
-                "title": title[:100] + "...",
-                "company": "Upwork Client",
-                "source": "Upwork",
-                "category": "Corporate/ELT",
-                "posted_date": datetime.now().strftime("%Y-%m-%d"),
-                "apply_url": link,
-                "pay_type": "Paid",
-                "rate_budget": "Paid Contract (See Listing)",
-                "job_desc": f"Remote Voiceover Contract.\n\n{desc[:150]}...\n\n[REQ_METADATA|Sex:Any|Age:25-45|Accents:Any|Style:Professional]"
-            })
-    except Exception as e:
-        logs.append(f"Upwork RSS: {str(e)}")
-        
-    return opportunities
-
-
-def scrape_bing_rss_search(logs):
+def scrape_ddg_lite_post(logs):
     """
-    Scrapes pre-rendered index data from SPAs like Twine and Casting Call Club.
-    Includes an aggressive spam filter to kill Bing Ad injections (e.g., 'Google Voice Phone').
+    Uses DuckDuckGo Lite POST requests to bypass HTTP 202 Cloudflare blocks entirely.
+    Pulls live data for Twine, Casting Call Club, LinkedIn, and Casting Networks.
     """
     opportunities = []
     
     queries = [
         ("Casting Call Club", 'site:castingcall.club/find_jobs "voice actor" OR "audition" OR "character"'),
-        ("Twine Jobs", 'site:twine.net/jobs "voiceover" OR "voice actor" OR "voice artist"'),
+        ("Twine Voice Gigs", 'site:twine.net/jobs "voiceover" OR "voice actor" OR "voice artist"'),
         ("Casting Networks", 'site:castingnetworks.com/voice-over-auditions "voice" OR "audition"'),
         ("LinkedIn Remote", 'site:linkedin.com/jobs "voice actor" remote OR freelance')
     ]
     
-    pay_keywords = ["paid", "$", "£", "€", "fee", "budget", "rate", "compensation", "stipend", "hiring", "salary"]
+    # Specific headers required for DDG Lite POST requests
+    ddg_headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Origin": "https://lite.duckduckgo.com",
+        "Referer": "https://lite.duckduckgo.com/"
+    }
     
-    # Strict filter to drop Bing Ads and irrelevant tech jobs
-    spam_keywords = ["business phone", "google voice", "voip", "telephone", "customer service", "pbx", "telecom"]
-    valid_keywords = ["voice", "actor", "audition", "casting", "narrator", "vo", "recording"]
+    pay_keywords = ["paid", "$", "£", "€", "fee", "budget", "rate", "compensation", "stipend", "hiring"]
+    spam_keywords = ["business phone", "google voice", "voip", "telephone", "customer service"]
 
-    for label, query in queries:
-        target_url = urllib.parse.quote(f"https://www.bing.com/search?q={urllib.parse.quote(query)}&format=rss")
-        proxy_url = f"https://api.allorigins.win/raw?url={target_url}"
-        
+    for label, search_query in queries:
         try:
-            time.sleep(1.0)
-            res = requests.get(proxy_url, headers=SCRAPER_HEADERS, timeout=15)
+            time.sleep(2.0)
+            payload = {"q": search_query, "kl": "wt-wt"}
+            res = requests.post("https://lite.duckduckgo.com/lite/", headers=ddg_headers, data=payload, timeout=12)
+            
             if res.status_code != 200:
-                logs.append(f"{label} (Bing RSS): HTTP Error {res.status_code}")
+                logs.append(f"{label}: HTTP Error {res.status_code}")
                 continue
                 
-            soup = BeautifulSoup(res.content, "html.parser")
+            soup = BeautifulSoup(res.text, "html.parser")
             
-            for item in soup.find_all("item"):
-                title = item.find("title").get_text(strip=True) if item.find("title") else ""
-                link = item.find("link").get_text(strip=True) if item.find("link") else ""
-                desc = item.find("description").get_text(strip=True) if item.find("description") else ""
+            # DDG Lite uses standard table rows for results
+            for a_tag in soup.find_all("a", class_="result-url"):
+                raw_link = a_tag.get("href", "")
+                snippet = a_tag.get_text(strip=True)
                 
-                title_lower = title.lower()
-                desc_lower = desc.lower()
+                title_lower = snippet.lower()
 
-                # 1. Kill Bing Ads and tech spam instantly
-                if any(spam in title_lower or spam in desc_lower for spam in spam_keywords):
+                if any(spam in title_lower for spam in spam_keywords):
+                    continue
+                if any(x in raw_link.lower() for x in ["/login", "/signup", "/privacy", "/terms", "/pricing"]):
+                    continue
+                if not any(valid in title_lower for valid in ["voice", "actor", "audition", "casting", "narrator", "vo"]):
                     continue
                 
-                # 2. Kill generic navigation/login links
-                if any(x in link.lower() for x in ["/login", "/signup", "/privacy", "/terms", "/pricing"]):
-                    continue
+                category_tag = "Voice Acting"
+                if "linkedin" in raw_link:
+                    category_tag = "Corporate/ELT"
                 
-                # 3. Ensure the listing actually talks about casting/acting
-                if not any(valid in title_lower or valid in desc_lower for valid in valid_keywords):
-                    continue
+                is_paid = any(w in title_lower for w in pay_keywords)
                 
-                if len(title) > 10:
-                    category_tag = "Voice Acting"
-                    if "linkedin" in link:
-                        category_tag = "Corporate/ELT"
-                    
-                    is_paid = any(w in title_lower or w in desc_lower for w in pay_keywords)
-                    
-                    opportunities.append({
-                        "title": title[:100] + "...",
-                        "company": label,
-                        "source": "Search Index",
-                        "category": category_tag,
-                        "posted_date": datetime.now().strftime("%Y-%m-%d"),
-                        "apply_url": link,
-                        "pay_type": "Paid" if is_paid else "Unpaid Opportunity",
-                        "rate_budget": "Paid Role" if is_paid else "Open Rate / Community Call",
-                        "job_desc": f"{desc[:200]}...\n\n[REQ_METADATA|Sex:Any|Age:25-45|Accents:RP, General British|Style:Warm, Articulate]"
-                    })
+                opportunities.append({
+                    "title": snippet[:100] + "...",
+                    "company": label,
+                    "source": "DDG Open Web",
+                    "category": category_tag,
+                    "posted_date": datetime.now().strftime("%Y-%m-%d"),
+                    "apply_url": raw_link,
+                    "pay_type": "Paid" if is_paid else "Unpaid Opportunity",
+                    "rate_budget": "Paid Role" if is_paid else "Open Rate / Community Call",
+                    "job_desc": f"Found via open directory search.\n\n[REQ_METADATA|Sex:Any|Age:25-45|Accents:RP, General British|Style:Warm, Articulate]"
+                })
                     
         except Exception as e:
-            logs.append(f"{label} (Bing RSS): {str(e)}")
+            logs.append(f"{label}: {str(e)}")
             
     return opportunities
 
@@ -328,10 +288,8 @@ def run_all_scrapers():
     logs = []
     results = []
     
-    # Run all proxy-bypassed scrapers
-    results.extend(scrape_reddit_json(logs))
-    results.extend(scrape_upwork_rss(logs))
-    results.extend(scrape_bing_rss_search(logs))
+    results.extend(scrape_reddit_old_rss(logs))
+    results.extend(scrape_ddg_lite_post(logs))
     
     seen_links = set()
     deduped = []
@@ -606,27 +564,14 @@ else:
                         
                         st.divider()
 
-                        col_btn1, col_btn2, col_btn3 = st.columns([1.5, 1.5, 1])
-                        with col_btn1:
-                            if apply_url and apply_url.strip():
-                                safe_source = sanitize_url(apply_url)
-                                st.markdown(f'<a href="{safe_source}" target="_blank"><button style="background-color:#2563EB;color:white;border:none;padding:10px 14px;border-radius:6px;cursor:pointer;width:100%;font-weight:bold;">🌐 View Original Post / Source</button></a>', unsafe_allow_html=True)
-                        with col_btn2:
-                            if app_method == "Email" and contact_email:
-                                st.write(f"✉️ **Direct Email:** `{contact_email}`")
-                            elif app_method == "Direct Web Application":
-                                st.write("🔵 **Apply via Web Portal**")
-                        with col_btn3:
-                            if st.button(f"📥 Save {company[:15]}", key=f"save_crm_{j_id}"):
-                                conn = get_db_connection()
-                                c = conn.cursor()
-                                c.execute("""INSERT INTO crm_contacts 
-                                             (user_id, name, studio, role, email, linkedin, youtube, instagram, genre, last_project, last_contact, contact_type) 
-                                             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-                                          (user_id, f"{company} Casting", company, "Casting Lead", contact_email if contact_email else apply_url, "", "", "", category, title, datetime.now().strftime("%Y-%m-%d"), "Scraped Lead"))
-                                conn.commit()
-                                conn.close()
-                                st.success("Saved to CRM!")
+                        col1, col2, col3 = st.columns(3)
+with col1:
+    # This specifically grabs the URL the scraper found and turns it into a clickable button
+    st.link_button("View Original Post | Source", opp["apply_url"])
+with col2:
+    st.button("Apply via Web Portal", key=f"apply_{i}")
+with col3:
+    st.button("Save to Vault", key=f"save_{i}")
 
         # ---------------------------------------------------------------------
         # TAB 2: CONTACT INTELLIGENCE HUB (CRM + SOCIALS + DEEP-DIG)

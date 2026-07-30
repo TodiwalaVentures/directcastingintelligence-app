@@ -165,23 +165,19 @@ SCRAPER_HEADERS = {
 
 def scrape_open_web_search(logs):
     """
-    Precision scraper targeting active casting calls while blacklisting 
-    user profiles, portfolio pages, and forum discussions.
+    Precision scraper targeting live job listings using castingcall.club/find_jobs,
+    Twine, Reddit, and professional casting networks.
     """
     opportunities = []
     
     queries = [
         (
-            "Casting Networks Voice Auditions",
-            'site:castingnetworks.com/voice-over-auditions ("voice-over" OR "voiceover" OR "VO" OR "audition")'
-        ),
-        (
             "Casting Call Club Jobs",
             'site:castingcall.club/find_jobs ("voice actor" OR "audition" OR "character voice" OR "paid voice" OR "actor")'
         ),
         (
-            "Twine Voice & Audio Jobs",
-            'site:twine.net/jobs ("voiceover" OR "voice actor" OR "actor" OR "audio engineer" OR "podcast" OR "voice artist")'
+            "Twine Voice & Audio Gigs",
+            'site:twine.net/jobs/ ("voiceover" OR "voice actor" OR "actor" OR "audio engineer" OR "podcast" OR "voice artist")'
         ),
         (
             "Reddit Voice Casting Boards",
@@ -215,7 +211,6 @@ def scrape_open_web_search(logs):
                 raw_link = a_tag.get("href", "")
                 snippet = a_tag.get_text(strip=True)
                 
-                # Unpack Yahoo redirect wrapper URLs
                 if "RU=" in raw_link:
                     try:
                         raw_link = urllib.parse.unquote(raw_link.split("RU=")[1].split("/RK=")[0])
@@ -224,29 +219,24 @@ def scrape_open_web_search(logs):
                 
                 if raw_link.startswith("http") and "yahoo.com" not in raw_link:
                     
-                    # BLOCKLIST FILTER: Exclude user profiles, portfolios, and forum threads
                     skip_patterns = [
                         "/talent/public-profile/", "/profile/", "/user/", 
-                        "/forums/", "/community/thread/", "/discuss/", "/talent/"
+                        "/forums/", "/community/thread/", "/discuss/", "/talent/", "/pricing", "/faq"
                     ]
                     if any(pattern in raw_link for pattern in skip_patterns):
                         continue
 
-                    # Path depth check to avoid root homepages
                     path_parts = raw_link.replace("https://", "").replace("http://", "").split("/")
                     if len(path_parts) < 3:
                         continue
                     
-                    # Keyword check to ensure snippet is job-related
                     snippet_lower = snippet.lower()
-                    if not any(k in snippet_lower for k in ["voice", "actor", "audition", "casting", "narrator", "vo"]):
+                    if not any(k in snippet_lower for k in ["voice", "actor", "audition", "casting", "narrator", "vo", "recording"]):
                         continue
 
                     category_tag = "Voice Acting"
                     if "audiodrama" in raw_link or "recordthis" in raw_link:
                         category_tag = "Audiobooks"
-                    elif "castingnetworks" in raw_link:
-                        category_tag = "Voice Acting"
                     elif "twine.net" in raw_link:
                         category_tag = "Corporate/ELT" if "corporate" in snippet_lower else "Voice Acting"
                     elif "behance" in raw_link:

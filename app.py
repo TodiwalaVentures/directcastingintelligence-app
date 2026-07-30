@@ -1,19 +1,25 @@
 import os
+import time
 import hashlib
 import urllib.parse
+import warnings
 from datetime import datetime, timedelta
 import requests
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, XMLParsedAsHTMLWarning
 import pandas as pd
 import psycopg2
 import streamlit as st
+
+# Suppress non-critical parser and database user warnings
+warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
+warnings.filterwarnings("ignore", category=UserWarning)
 
 # -----------------------------------------------------------------------------
 # 1. MASTER BRAND CONFIGURATION & PAGE SETUP
 # -----------------------------------------------------------------------------
 APP_NAME = "DCI"
 APP_FULL_TITLE = "Direct Casting Intelligence"
-COMPANY_NAME = "Todiwala Ventures LTD"
+COMPANY_NAME = "Todiwala Ventures LTD - Digital Media Division"
 
 st.set_page_config(
     page_title=f"{APP_NAME} — {APP_FULL_TITLE}",
@@ -159,7 +165,7 @@ SCRAPER_HEADERS = {
 
 def scrape_voice_acting_club(logs):
     opportunities = []
-    urls = [("Paid", "https://castingcall.club/find_jobs"), ("Unpaid", "https://castingcall.club/find_jobs")]
+    urls = [("Paid", "https://www.castingcall.club/find_jobs"), ("Unpaid", "https://www.castingcall.club/find_jobs")]
     for category, url in urls:
         source_label = f"Casting Call ({category})"
         try:
@@ -184,8 +190,9 @@ def scrape_voice_acting_club(logs):
         except Exception as e:
             logs.append(f"{source_label}: {str(e)}")
     return opportunities
+
 def scrape_reddit_rss(logs):
-    """Scrapes expanded list of community subreddits via RSS feeds."""
+    """Scrapes community subreddits via RSS feeds with rate-limit pacing."""
     subreddits = [
         "recordthis", "VoiceActing", "voiceover", "INAT", 
         "AudioDrama", "acting", "gamedev", "LetsPlay"
@@ -193,7 +200,7 @@ def scrape_reddit_rss(logs):
     opportunities = []
     keywords = [
         "casting", "hiring", "paid", "va needed", "voice artist", 
-        "voice actor", "looking for voice", "seeking voice", 
+        "voice actor", "looking for voice", "seeking voices", 
         "seeking narrator", "vo casting", "voiceover", "audition"
     ]
     
@@ -201,10 +208,13 @@ def scrape_reddit_rss(logs):
         source_label = f"Reddit /r/{sub}"
         url = f"https://www.reddit.com/r/{sub}/new/.rss"
         try:
+            # 0.5s pause between subreddits prevents HTTP 429 Rate Limits
+            time.sleep(0.5)
             res = requests.get(url, headers=SCRAPER_HEADERS, timeout=10)
             if res.status_code != 200:
                 logs.append(f"{source_label}: HTTP Error {res.status_code}")
                 continue
+            
             soup = BeautifulSoup(res.content, "html.parser")
             for entry in soup.find_all("entry"):
                 title_elem = entry.find("title")
@@ -230,29 +240,39 @@ def scrape_reddit_rss(logs):
                         })
         except Exception as e:
             logs.append(f"{source_label}: {str(e)}")
+            
     return opportunities
 
-
 def scrape_open_web_search(logs):
-    """Scrapes Twitter/X, targeted Reddit queries, open platforms, and directory boards."""
+    """
+    Scrapes open web networks, social handles, and freelance job boards.
+    Groups queries into 3 requests with pacing to avoid HTTP 202 anti-bot challenges.
+    """
     opportunities = []
+    
     queries = [
-        ("Twitter / X (@VACastingCallRT & Hashtags)", '(site:x.com OR site:twitter.com) (VACastingCallRT OR "#voiceoverjob" OR "#voiceactingjob" OR "#VOcastingcall" OR "voice actor needed")'),
-        ("Reddit Search Queries", 'site:reddit.com ("voice actor needed" OR "VO casting" OR "looking for a voice actor" OR "seeking voice talent" OR "seeking narrator")'),
-        ("LinkedIn Open Call", 'site:linkedin.com/posts ("voice artist" OR "voice actor" OR "voice casting")'),
-        ("Bluesky Network Call", 'site:bsky.app/profile ("voice artist" OR "voice actor" OR "voice casting")'),
-        ("Casting Call Club", 'site:castingcall.club/find_jobs OR site:castingcall.club/find_jobs ("voice actor" OR "casting call" OR "audition")'),
-        ("Upwork Freelance Jobs", 'site:upwork.com/freelance-jobs ("voice over" OR "voice actor" OR "voiceover")'),
-        ("PeoplePerHour Jobs", 'site:peopleperhour.com/freelance-jobs ("voice over" OR "voiceover" OR "voice actor")'),
-        ("Freelancer & ACX Jobs", 'site:freelancer.com/jobs OR site:freelancer.com/job-search ("voice over" OR "acx" OR "voiceover")'),
-        ("Guru Jobs", 'site:guru.com/d/jobs ("voice over" OR "voiceover")'),
-        ("Twine & Behance Boards", 'site:twine.net/jobs OR site:twine.net/find OR site:behance.net/joblist ("voice over" OR "voice actor" OR "voiceover")'),
-        ("Fiverr Open Calls", 'site:fiverr.com ("voice over" OR "voice actor" OR "voice artist")'),
+        (
+            "Social Networks & Communities (LinkedIn/Bluesky/Twitter/Reddit)",
+            '(site:linkedin.com/posts OR site:bsky.app/profile OR site:x.com OR site:twitter.com OR site:reddit.com) '
+            '("voice artist needed" OR "voice actor needed" OR "VO casting" OR "seeking voice talent" OR "VACastingCallRT")'
+        ),
+        (
+            "Casting & Creative Boards (Casting Call Club/Twine/Behance)",
+            ' site:twine.net/jobs OR site:behance.net/joblist) '
+            '("voice actor" OR "voice over" OR "casting call" OR "audition")'
+        ),
+        (
+            "Freelance Job Portals (Upwork/PeoplePerHour/Freelancer/Guru/Fiverr)",
+            '(site:upwork.com/freelance-jobs OR site:peopleperhour.com OR site:freelancer.com OR site:guru.com OR site:fiverr.com) '
+            '("voice over" OR "voiceover" OR "voice actor" OR "acx")'
+        )
     ]
 
     for label, search_query in queries:
         url = f"https://html.duckduckgo.com/html/?q={urllib.parse.quote(search_query)}"
         try:
+            # 1.2s pause between web queries prevents DuckDuckGo HTTP 202 bot challenges
+            time.sleep(1.2)
             res = requests.get(url, headers=SCRAPER_HEADERS, timeout=10)
             if res.status_code != 200:
                 logs.append(f"{label}: HTTP Error {res.status_code}")
@@ -275,15 +295,15 @@ def scrape_open_web_search(logs):
                     category_tag = "Voice Acting"
                     if "linkedin" in raw_link or "behance" in raw_link:
                         category_tag = "Commercial Print/Modeling"
-                    elif "upwork" in raw_link or "peopleperhour" in raw_link or "guru" in raw_link:
+                    elif any(domain in raw_link for domain in ["upwork", "peopleperhour", "guru", "fiverr"]):
                         category_tag = "Corporate/ELT"
                     elif "x.com" in raw_link or "twitter.com" in raw_link:
                         category_tag = "Animation"
 
                     opportunities.append({
                         "title": snippet[:120] + "...",
-                        "company": label,
-                        "source": label,
+                        "company": label.split(" (")[0],
+                        "source": label.split(" (")[0],
                         "category": category_tag,
                         "posted_date": datetime.now().strftime("%Y-%m-%d"),
                         "apply_url": raw_link,
@@ -294,81 +314,6 @@ def scrape_open_web_search(logs):
         except Exception as e:
             logs.append(f"{label}: {str(e)}")
 
-    return opportunities
-    
-def scrape_reddit_rss(logs):
-    subreddits = ["recordthis", "VoiceActing", "VoiceOver", "INAT", "AudioDrama"]
-    opportunities = []
-    for sub in subreddits:
-        source_label = f"Reddit /r/{sub}"
-        url = f"https://www.reddit.com/r/{sub}/new/.rss"
-        try:
-            res = requests.get(url, headers=SCRAPER_HEADERS, timeout=10)
-            if res.status_code != 200:
-                logs.append(f"{source_label}: HTTP Error {res.status_code}")
-                continue
-            soup = BeautifulSoup(res.content, "html.parser")
-            keywords = ["casting", "hiring", "paid", "va needed", "voice artist", "voice actor", "looking for voice"]
-            for entry in soup.find_all("entry"):
-                title_elem = entry.find("title")
-                link_elem = entry.find("link")
-                updated_elem = entry.find("updated")
-                if title_elem and any(kw in title_elem.get_text().lower() for kw in keywords):
-                    link = link_elem["href"] if link_elem and "href" in link_elem.attrs else f"https://reddit.com/r/{sub}"
-                    date_str = updated_elem.get_text()[:10] if updated_elem else "Recent"
-                    title = title_elem.get_text().strip()
-                    pay_type = "Paid" if any(w in title.lower() for w in ["paid", "$", "£", "hiring"]) else "Unpaid Opportunity"
-                    
-                    opportunities.append({
-                        "title": title[:100],
-                        "company": f"Reddit /r/{sub} Poster",
-                        "source": source_label,
-                        "category": "AudioDrama" if sub == "AudioDrama" else "Voice Acting",
-                        "posted_date": date_str,
-                        "apply_url": link,
-                        "pay_type": pay_type,
-                        "rate_budget": "Paid Role" if pay_type == "Paid" else "Community Call",
-                        "job_desc": f"{title}\n\n[REQ_METADATA|Sex:Any|Age:20-50|Accents:Any|Style:Conversational]"
-                    })
-        except Exception as e:
-            logs.append(f"{source_label}: {str(e)}")
-    return opportunities
-
-def scrape_open_web_search(logs):
-    opportunities = []
-    queries = [
-        ("LinkedIn Open Call", 'site:linkedin.com/posts ("voice artist" OR "voice actor" OR "voice casting")'),
-        ("Bluesky Network Call", 'site:bsky.app/profile ("voice artist" OR "voice actor" OR "voice casting")'),
-    ]
-    for label, search_query in queries:
-        url = f"https://html.duckduckgo.com/html/?q={urllib.parse.quote(search_query)}"
-        try:
-            res = requests.get(url, headers=SCRAPER_HEADERS, timeout=10)
-            if res.status_code != 200:
-                logs.append(f"{label}: HTTP Error {res.status_code}")
-                continue
-            soup = BeautifulSoup(res.text, "html.parser")
-            for result in soup.find_all("div", class_="result__body"):
-                title_elem = result.find("a", class_="result__url")
-                snippet_elem = result.find("a", class_="result__snippet")
-                if title_elem and snippet_elem:
-                    snippet = snippet_elem.get_text().strip()
-                    raw_link = title_elem["href"]
-                    if "uddg=" in raw_link:
-                        raw_link = urllib.parse.unquote(raw_link.split("uddg=")[1].split("&")[0])
-                    opportunities.append({
-                        "title": snippet[:120] + "...",
-                        "company": label,
-                        "source": label,
-                        "category": "Commercial Print/Modeling" if "linkedin" in label.lower() else "Voice Acting",
-                        "posted_date": datetime.now().strftime("%Y-%m-%d"),
-                        "apply_url": raw_link,
-                        "pay_type": "Paid" if "paid" in snippet.lower() else "Unpaid Opportunity",
-                        "rate_budget": "Open Rate / Negotiable",
-                        "job_desc": f"{snippet}\n\n[REQ_METADATA|Sex:Any|Age:25-45|Accents:RP, General British|Style:Warm, Articulate]"
-                    })
-        except Exception as e:
-            logs.append(f"{label}: {str(e)}")
     return opportunities
 
 def run_all_scrapers():
@@ -503,7 +448,7 @@ else:
             "🎯 Tab 1: Opportunities Feed", 
             "👥 Tab 2: Contact Hub", 
             "✉️ Tab 3: Outreach Studio", 
-            "📚 Tab 4: Work Resources Vault", 
+            "📚 Tab 4: Agency Vault", 
             "👤 Tab 5: Profile & GDPR"
         ])
 
@@ -592,10 +537,8 @@ else:
 
             st.divider()
 
-            # User Profile Specs
             user_accents_list = [a.strip().lower() for a in u_accent.split(",")] if u_accent else []
 
-            # Fetch Jobs
             conn = get_db_connection()
             c = conn.cursor()
             c.execute("""SELECT id, title, company, source, category, posted_date, deadline, region_location, app_method, contact_email, apply_url, rate_budget, pay_type, job_desc 
@@ -622,7 +565,6 @@ else:
                             elif item.startswith("Accents:"): req_accents = item.replace("Accents:", "").strip()
                             elif item.startswith("Style:"): req_style = item.replace("Style:", "").strip()
 
-                    # Filters
                     if discipline_filter != "All Disciplines" and category != discipline_filter: continue
                     if method_filter != "All Methods" and app_method != method_filter: continue
                     if gender_filter != "All / Any" and req_sex != "Any" and req_sex != gender_filter: continue
@@ -630,7 +572,6 @@ else:
                     if u_pay == "Paid Work Only" and pay_type == "Unpaid Opportunity": continue
                     if u_pay == "Unpaid Opportunities Only (Reel Building / Festival)" and pay_type == "Paid": continue
 
-                    # SOFT VOCAL STYLE MATCHING
                     user_default_style = u_desc.lower() if u_desc else ""
                     req_style_clean = req_style.lower()
                     
@@ -821,10 +762,10 @@ Spotlight Profile: {u_spotlight}{gdpr_footer}"""
                 st.markdown(f'<a href="{mailto_cmd}" target="_blank"><button style="background-color:#2563EB;color:white;border:none;padding:12px 24px;border-radius:6px;cursor:pointer;font-weight:bold;width:100%;">✉️ Launch Email in Mail App / Outlook</button></a>', unsafe_allow_html=True)
 
         # ---------------------------------------------------------------------
-        # TAB 4: UNIFIED RESOURCE & INTAKE VAULT
+        # TAB 4: UNIFIED RESOURCE & AGENCY INTAKE VAULT
         # ---------------------------------------------------------------------
         with tabs[3]:
-            st.header("📚 Tab 4: Unified Resources & Intake Vault")
+            st.header("📚 Tab 4: Unified Resource & Agency Intake Vault")
             st.caption("Ungated roster submission forms, audiobook portals, and dubbing intake links.")
             
             vault_data = [
@@ -845,7 +786,7 @@ Spotlight Profile: {u_spotlight}{gdpr_footer}"""
                 {"Category": "Commercial & Corporate Roster", "Name": "Voquent", "Submission Type": "Free Platform Profile", "Action": "Create Voice Profile"}
             ]
             df_vault = pd.DataFrame(vault_data)
-            st.dataframe(df_vault, use_container_width=True)
+            st.dataframe(df_vault, width="stretch")
 
         # ---------------------------------------------------------------------
         # TAB 5: SPOTLIGHT PROFILE & GDPR PRIVACY CONTROLS
@@ -911,9 +852,13 @@ Spotlight Profile: {u_spotlight}{gdpr_footer}"""
                 st.caption("Export all stored CRM contacts to CSV.")
                 
                 conn = get_db_connection()
-                user_crm = pd.read_sql_query("SELECT name, studio, role, email, linkedin, youtube, instagram, genre, last_project, last_contact FROM crm_contacts WHERE user_id = %s", conn, params=(user_id,))
+                c = conn.cursor()
+                c.execute("SELECT name, studio, role, email, linkedin, youtube, instagram, genre, last_project, last_contact FROM crm_contacts WHERE user_id = %s", (user_id,))
+                rows = c.fetchall()
+                colnames = [desc[0] for desc in c.description]
                 conn.close()
                 
+                user_crm = pd.DataFrame(rows, columns=colnames)
                 csv_data = user_crm.to_csv(index=False).encode('utf-8')
                 st.download_button("📥 Export My CRM Data (CSV)", csv_data, f"dci_crm_export_user_{user_id}.csv", "text/csv")
 

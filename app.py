@@ -151,9 +151,6 @@ def sanitize_url(url: str) -> str:
     return "#"
 
 # -----------------------------------------------------------------------------
-# 4. HIGH-YIELD SCRAPING ENGINE (CASTING CALL CLUB, BLUESKY, REDDIT, NEWGROUNDS)
-# -----------------------------------------------------------------------------
-# -----------------------------------------------------------------------------
 # 4. HIGH-YIELD SCRAPING ENGINE (AWS & STREAMLIT-CLOUD FRIENDLY)
 # -----------------------------------------------------------------------------
 def fetch_live_casting_opportunities(user_id):
@@ -163,18 +160,18 @@ def fetch_live_casting_opportunities(user_id):
     today_str = str(datetime.now().date())
     deadline_str = str((datetime.now() + timedelta(days=14)).date())
 
-    # Voice Acting Club - Paid & Unpaid RSS (Works 100% from AWS / Streamlit Cloud)
+    # 1. VOICE ACTING CLUB - PAID & UNPAID RSS (100% Works from AWS / Streamlit Cloud)
     vac_sources = [
         ("Voice Acting Club (Paid)", "https://voiceacting.boards.net/board/11/casting-calls-paid/rss", "Paid"),
         ("Voice Acting Club (Unpaid)", "https://voiceacting.boards.net/board/22/casting-calls-unpaid/rss", "Unpaid Opportunity")
     ]
     
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+    vac_headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
 
     for name, rss_url, pay_type in vac_sources:
         try:
-            req = urllib.request.Request(rss_url, headers=headers)
-            with urllib.request.urlopen(req, timeout=10) as resp:
+            req = urllib.request.Request(rss_url, headers=vac_headers)
+            with urllib.request.urlopen(req, timeout=8) as resp:
                 xml_data = resp.read().decode('utf-8', errors='ignore')
                 root = ET.fromstring(xml_data)
                 for item in root.findall(".//item"):
@@ -203,13 +200,10 @@ def fetch_live_casting_opportunities(user_id):
         except Exception as e:
             scrape_errors.append(f"{name}: {e}")
 
-    return scraped_jobs, scrape_errors
-
-    # 2. REDDIT SUBREDDITS (FIXED UNIQUE USER-AGENT TO PREVENT HTTP 429 BLOCKS)
+    # 2. REDDIT SUBREDDITS (CUSTOM APP USER-AGENT BYPASSES HTTP 429 BLOCKS)
     reddit_subs = ["recordthis", "VoiceActing", "VoiceOver", "INAT", "Audiodrama"]
     reddit_keywords = ['paid', 'casting', 'hiring', 'looking for', 'casting call', 'voice actor', 'voice artist', 'audition', 'narrator']
     
-    # Critical Fix: Custom App User-Agent string bypasses Reddit's 429/403 scraper block
     reddit_headers = {
         'User-Agent': 'python:com.todiwalaventures.dci:v1.0.0 (by /u/DCI_Casting_Engine)'
     }
@@ -285,28 +279,6 @@ def fetch_live_casting_opportunities(user_id):
 
     return scraped_jobs, scrape_errors
 
-    # 4. LIVE SCRAPE: Newgrounds Collaboration Board (Animation & Game VO)
-    try:
-        ng_url = "https://www.newgrounds.com/bbs/forum/23"
-        req = urllib.request.Request(ng_url, headers=headers)
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            html = resp.read().decode('utf-8', errors='ignore')
-            ng_matches = re.findall(r'/bbs/topic/([0-9]+)"[^>]*>(.*?)</a>', html, re.DOTALL)
-            for t_id, raw_title in ng_matches[:10]:
-                clean_title = re.sub(r'<[^<]+?>', '', raw_title).strip()
-                if any(kw in clean_title.lower() for kw in ['voice', 'actor', 'casting', 'va', 'dub']):
-                    t_url = f"https://www.newgrounds.com/bbs/topic/{t_id}"
-                    scraped_jobs.append((
-                        user_id, f"[NEWGROUNDS] {clean_title[:70]}", "Newgrounds Creator", "Newgrounds Collaboration Board",
-                        "Animation", today_str, deadline_str, "🌍 Worldwide Remote", "Direct Web Application", "", t_url,
-                        "Indie Game / Animation Rate", "Paid" if "paid" in clean_title.lower() else "Unpaid Opportunity",
-                        "Newgrounds collaboration board casting call.", "Any", "18-45", "RP, US, General British", "Character"
-                    ))
-    except Exception as e:
-        scrape_errors.append(f"Newgrounds BBS: {e}")
-
-    return scraped_jobs, scrape_errors
-
 # -----------------------------------------------------------------------------
 # 5. UNIFIED RESOURCE VAULT DATABASE (100% CLEANED & VERIFIED - NO SCAM SITES)
 # -----------------------------------------------------------------------------
@@ -326,7 +298,7 @@ VAULT_FULL_DATA = [
     {"Name": "PeoplePerHour", "Resource Type": "General Freelance", "Work Type": "Commercial & Corporate VO", "Demo Required": "No", "Notes": "Free browsing; service fee applies to completed projects.", "Link": "https://www.peopleperhour.com/freelance-voice-over-jobs"},
     {"Name": "Freelancer.com", "Resource Type": "General Freelance", "Work Type": "Voiceover & Audio Editing", "Demo Required": "No", "Notes": "Free to sign up and bid on active client queries.", "Link": "https://www.freelancer.com/job-search/voice-over/"},
     {"Name": "Guru.com", "Resource Type": "General Freelance", "Work Type": "Corporate, ELT, Narration", "Demo Required": "No", "Notes": "Free browse and job application submissions.", "Link": "https://www.guru.com/d/jobs/skill/voice-over/"},
-    {"Name": "Twine.net", "Resource Type": "General Freelance", "Work Type": "Voiceover Artists & Singers", "Demo Required": "No", "Notes": "Talent list day rates; free to join and bid.", "Link": "https://www.twine.net/find/voiceover-artists"},
+    {"Name": "Twine.net", "Resource Type": "General Freelance", "Work Type": "Voiceover Artists & Singers", "Demo Required": "No", "Notes": "Talent list day rates; free to join and bid.", "Link": "https://www.twine.net/jobs/music-audio"},
     {"Name": "Behance Job Board", "Resource Type": "Creative Job Board", "Work Type": "Animation, Video Games, Commercial", "Demo Required": "No", "Notes": "Clean, filtered creative listings.", "Link": "https://www.behance.net/joblist?country=US&search=voice+over"},
     {"Name": "ACX (Audible)", "Resource Type": "Audiobook Casting Database", "Work Type": "Audiobooks", "Demo Required": "No", "Notes": "Free account and auditions; US/UK/Canada/Ireland residents only.", "Link": "https://www.acx.com/"},
     {"Name": "Findaway Voices", "Resource Type": "Audiobook Casting Database", "Work Type": "Audiobooks", "Demo Required": "No", "Notes": "Free profile; projects are algorithmically matched to your voice specs.", "Link": "https://findawayvoices.com/narrators"},
@@ -551,7 +523,7 @@ else:
                     
                     conn = get_db_connection()
                     c = conn.cursor()
-                    c.execute("SELECT title, company FROM active_jobs WHERE user_id = %s", (user_id,))
+                    c.execute("SELECT title, company FROM active_jobs WHERE user_id = %s OR user_id IS NULL", (user_id,))
                     existing_records = set((row[0], row[1]) for row in c.fetchall())
 
                     jobs_to_insert = [job for job in scraped_data_feed if (job[1], job[2]) not in existing_records]
@@ -566,7 +538,7 @@ else:
                         st.success(f"Fetched {len(jobs_to_insert)} new live casting calls across all directories!")
                         st.rerun()
                     else:
-                        c.execute("SELECT COUNT(*) FROM active_jobs WHERE user_id = %s", (user_id,))
+                        c.execute("SELECT COUNT(*) FROM active_jobs WHERE user_id = %s OR user_id IS NULL", (user_id,))
                         total_db_jobs = c.fetchone()[0]
                         if total_db_jobs > 0:
                             st.info("Live feed is fully up to date.")
@@ -582,7 +554,7 @@ else:
                 if st.button("🧹 Clear Feed"):
                     conn = get_db_connection()
                     c = conn.cursor()
-                    c.execute("DELETE FROM active_jobs WHERE user_id = %s", (user_id,))
+                    c.execute("DELETE FROM active_jobs WHERE user_id = %s OR user_id IS NULL", (user_id,))
                     conn.commit()
                     conn.close()
                     st.toast("Feed cleared!", icon="🗑️")
@@ -603,15 +575,15 @@ else:
 
             user_accents_list = [a.strip().lower() for a in u_accent.split(",")] if u_accent else []
 
-          # Fetch Jobs (Pulls both user-saved jobs and background-scraped global jobs)
-conn = get_db_connection()
-c = conn.cursor()
-c.execute("""SELECT id, title, company, source, category, posted_date, deadline, region_location, app_method, contact_email, apply_url, rate_budget, pay_type, job_desc 
-            FROM active_jobs 
-            WHERE user_id = %s OR user_id IS NULL 
-            ORDER BY id DESC""", (user_id,))
-jobs = c.fetchall()
-conn.close()
+            # Fetch Jobs (Pulls both user-saved jobs and background-scraped global jobs)
+            conn = get_db_connection()
+            c = conn.cursor()
+            c.execute("""SELECT id, title, company, source, category, posted_date, deadline, region_location, app_method, contact_email, apply_url, rate_budget, pay_type, job_desc 
+                        FROM active_jobs 
+                        WHERE user_id = %s OR user_id IS NULL 
+                        ORDER BY id DESC""", (user_id,))
+            jobs = c.fetchall()
+            conn.close()
 
             if not jobs:
                 st.info("No active opportunities loaded. Click '🔄 Scrub Open Casting Directories Now' above.")

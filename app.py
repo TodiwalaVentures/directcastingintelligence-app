@@ -159,7 +159,7 @@ SCRAPER_HEADERS = {
 
 def scrape_voice_acting_club(logs):
     opportunities = []
-    urls = [("Paid", "https://castingcall.club/projects"), ("Unpaid", "https://castingcall.club/projects")]
+    urls = [("Paid", "https://castingcall.club/find_jobs"), ("Unpaid", "https://castingcall.club/find_jobs")]
     for category, url in urls:
         source_label = f"Casting Call ({category})"
         try:
@@ -241,7 +241,7 @@ def scrape_open_web_search(logs):
         ("Reddit Search Queries", 'site:reddit.com ("voice actor needed" OR "VO casting" OR "looking for a voice actor" OR "seeking voice talent" OR "seeking narrator")'),
         ("LinkedIn Open Call", 'site:linkedin.com/posts ("voice artist" OR "voice actor" OR "voice casting")'),
         ("Bluesky Network Call", 'site:bsky.app/profile ("voice artist" OR "voice actor" OR "voice casting")'),
-        ("Casting Call Club", 'site:castingcall.club/projects OR site:castingcall.club/find_jobs ("voice actor" OR "casting call" OR "audition")'),
+        ("Casting Call Club", 'site:castingcall.club/find_jobs OR site:castingcall.club/find_jobs ("voice actor" OR "casting call" OR "audition")'),
         ("Upwork Freelance Jobs", 'site:upwork.com/freelance-jobs ("voice over" OR "voice actor" OR "voiceover")'),
         ("PeoplePerHour Jobs", 'site:peopleperhour.com/freelance-jobs ("voice over" OR "voiceover" OR "voice actor")'),
         ("Freelancer & ACX Jobs", 'site:freelancer.com/jobs OR site:freelancer.com/job-search ("voice over" OR "acx" OR "voiceover")'),

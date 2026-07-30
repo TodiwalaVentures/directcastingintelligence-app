@@ -165,12 +165,16 @@ SCRAPER_HEADERS = {
 
 def scrape_open_web_search(logs):
     """
-    Precision scraper targeting live job listings using castingcall.club/find_jobs,
-    Twine, Reddit, and professional casting networks.
+    Precision scraper targeting live job listings using Casting Networks,
+    Casting Call Club (/find_jobs), Twine, and Reddit casting boards.
     """
     opportunities = []
     
     queries = [
+        (
+            "Casting Networks Voice Auditions",
+            'site:castingnetworks.com/voice-over-auditions/ ("voice-over" OR "voiceover" OR "VO" OR "audition" OR "commercial" OR "actor")'
+        ),
         (
             "Casting Call Club Jobs",
             'site:castingcall.club/find_jobs ("voice actor" OR "audition" OR "character voice" OR "paid voice" OR "actor")'
@@ -182,10 +186,6 @@ def scrape_open_web_search(logs):
         (
             "Reddit Voice Casting Boards",
             '(site:reddit.com/r/VoiceActing OR site:reddit.com/r/RecordThis OR site:reddit.com/r/audiodrama) ("hiring" OR "paid" OR "casting call" OR "voice actor needed")'
-        ),
-        (
-            "Indie Game & Creative Boards",
-            '(site:itch.io/t/ OR site:behance.net/joblist) ("voice over" OR "voice actor needed" OR "casting")'
         )
     ]
 
@@ -219,6 +219,7 @@ def scrape_open_web_search(logs):
                 
                 if raw_link.startswith("http") and "yahoo.com" not in raw_link:
                     
+                    # Blocklist to prevent profiles and forum noise from entering Tab 1
                     skip_patterns = [
                         "/talent/public-profile/", "/profile/", "/user/", 
                         "/forums/", "/community/thread/", "/discuss/", "/talent/", "/pricing", "/faq"
@@ -237,12 +238,10 @@ def scrape_open_web_search(logs):
                     category_tag = "Voice Acting"
                     if "audiodrama" in raw_link or "recordthis" in raw_link:
                         category_tag = "Audiobooks"
+                    elif "castingnetworks" in raw_link:
+                        category_tag = "Voice Acting"
                     elif "twine.net" in raw_link:
                         category_tag = "Corporate/ELT" if "corporate" in snippet_lower else "Voice Acting"
-                    elif "behance" in raw_link:
-                        category_tag = "Commercial Print/Modeling"
-                    elif "itch.io" in raw_link:
-                        category_tag = "Video Games"
 
                     is_paid = any(w in snippet_lower for w in pay_keywords)
 

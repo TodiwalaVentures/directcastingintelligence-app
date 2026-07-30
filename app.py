@@ -157,15 +157,12 @@ def sanitize_url(url: str) -> str:
 # -----------------------------------------------------------------------------
 # 4. DYNAMIC LIVE WEB SCRAPER ENGINE
 # -----------------------------------------------------------------------------
-# -----------------------------------------------------------------------------
-# 4. DYNAMIC LIVE WEB SCRAPER ENGINE
-# -----------------------------------------------------------------------------
-# -----------------------------------------------------------------------------
-# 4. DYNAMIC LIVE WEB SCRAPER ENGINE
-# -----------------------------------------------------------------------------
 
-def scrape_reddit_json(logs):
-    """Scrapes subreddits via JSON to bypass XML crashes and RSS 429 blocks."""
+def scrape_reddit_rss2json(logs):
+    """
+    Bypasses Reddit's HTTP 403 Cloud IP blocks by routing RSS requests 
+    through the free rss2json.com public API proxy.
+    """
     subreddits = [
         "recordthis", "VoiceActing", "voiceover", "INAT", 
         "AudioDrama", "acting", "gamedev", "LetsPlay"
@@ -177,44 +174,38 @@ def scrape_reddit_json(logs):
         "seeking narrator", "vo casting", "voiceover", "audition"
     ]
     
-    # Unique User-Agent required by Reddit API guidelines to prevent 429 blocks
-    reddit_headers = {
-        "User-Agent": "python:dci.casting.app:v2.0 (by /u/HomerT)"
-    }
-    
     for sub in subreddits:
         source_label = f"Reddit /r/{sub}"
-        # Fetching raw JSON data instead of RSS XML
-        url = f"https://www.reddit.com/r/{sub}/new.json?limit=15"
+        # Route through the RSS2JSON middleman API
+        url = f"https://api.rss2json.com/v1/api.json?rss_url=https://www.reddit.com/r/{sub}/new/.rss"
         try:
-            time.sleep(1.5)
-            res = requests.get(url, headers=reddit_headers, timeout=10)
+            time.sleep(1.0) # Light pacing for the API
+            res = requests.get(url, timeout=10)
             if res.status_code != 200:
-                logs.append(f"{source_label}: HTTP Error {res.status_code}")
+                logs.append(f"{source_label}: API Error {res.status_code}")
                 continue
             
             data = res.json()
-            posts = data.get("data", {}).get("children", [])
-            
-            for post in posts:
-                post_data = post.get("data", {})
-                title = post_data.get("title", "")
-                
-                if any(kw in title.lower() for kw in keywords):
-                    link = "https://reddit.com" + post_data.get("permalink", f"/r/{sub}")
-                    pay_type = "Paid" if any(w in title.lower() for w in ["paid", "$", "£", "hiring"]) else "Unpaid Opportunity"
+            if data.get("status") == "ok":
+                for item in data.get("items", []):
+                    title = item.get("title", "").strip()
                     
-                    opportunities.append({
-                        "title": title[:100] + "...",
-                        "company": f"Reddit /r/{sub} Poster",
-                        "source": source_label,
-                        "category": "Audiobooks" if sub == "AudioDrama" else ("Screen/Film/TV" if sub in ["acting", "gamedev"] else "Voice Acting"),
-                        "posted_date": datetime.now().strftime("%Y-%m-%d"),
-                        "apply_url": link,
-                        "pay_type": pay_type,
-                        "rate_budget": "Paid Role" if pay_type == "Paid" else "Community Call",
-                        "job_desc": f"{title}\n\n[REQ_METADATA|Sex:Any|Age:20-50|Accents:Any|Style:Conversational]"
-                    })
+                    if any(kw in title.lower() for kw in keywords):
+                        link = item.get("link", f"https://reddit.com/r/{sub}")
+                        pub_date = item.get("pubDate", "")[:10]
+                        pay_type = "Paid" if any(w in title.lower() for w in ["paid", "$", "£", "hiring"]) else "Unpaid Opportunity"
+                        
+                        opportunities.append({
+                            "title": title[:100] + "...",
+                            "company": f"Reddit /r/{sub} Poster",
+                            "source": source_label,
+                            "category": "Audiobooks" if sub == "AudioDrama" else ("Screen/Film/TV" if sub in ["acting", "gamedev"] else "Voice Acting"),
+                            "posted_date": pub_date if pub_date else datetime.now().strftime("%Y-%m-%d"),
+                            "apply_url": link,
+                            "pay_type": pay_type,
+                            "rate_budget": "Paid Role" if pay_type == "Paid" else "Community Call",
+                            "job_desc": f"{title}\n\n[REQ_METADATA|Sex:Any|Age:20-50|Accents:Any|Style:Conversational]"
+                        })
         except Exception as e:
             logs.append(f"{source_label}: {str(e)}")
             
@@ -223,8 +214,8 @@ def scrape_reddit_json(logs):
 
 def scrape_open_web_search(logs):
     """
-    Scrapes web networks and freelance boards using DuckDuckGo Lite POST requests 
-    to successfully bypass HTTP 202 JavaScript Bot Challenges.
+    Scrapes open casting platforms via Yahoo Search to bypass 
+    DuckDuckGo's HTTP 202 Cloudflare/Bot CAPTCHA challenges.
     """
     opportunities = []
     
@@ -243,21 +234,21 @@ def scrape_open_web_search(logs):
         )
     ]
 
-    ddg_lite_url = "https://lite.duckduckgo.com/lite/"
-    ddg_headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-        "Content-Type": "application/x-www-form-urlencoded",
-        "Origin": "https://lite.duckduckgo.com",
-        "Referer": "https://lite.duckduckgo.com/"
+    yahoo_headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
     }
+    
+    target_domains = [
+        "linkedin.com", "bsky.app", "x.com", "twitter.com", "reddit.com", 
+        "castingcall.club", "twine.net", "behance.net", 
+        "upwork.com", "peopleperhour.com", "freelancer.com", "guru.com", "fiverr.com"
+    ]
 
     for label, search_query in queries:
+        url = f"https://search.yahoo.com/search?p={urllib.parse.quote(search_query)}"
         try:
             time.sleep(2.0)
-            payload = {"q": search_query, "kl": "wt-wt"}
-            # Sending a POST request to DDG Lite bypasses Streamlit IP blocking
-            res = requests.post(ddg_lite_url, headers=ddg_headers, data=payload, timeout=15)
+            res = requests.get(url, headers=yahoo_headers, timeout=10)
             
             if res.status_code != 200:
                 logs.append(f"{label}: HTTP Error {res.status_code}")
@@ -265,19 +256,24 @@ def scrape_open_web_search(logs):
                 
             soup = BeautifulSoup(res.text, "html.parser")
             
+            # Yahoo wraps results in standard <a> tags, making it highly scrapeable
             for a_tag in soup.find_all("a"):
-                href = a_tag.get("href", "")
+                raw_link = a_tag.get("href", "")
                 snippet = a_tag.get_text(strip=True)
                 
-                # Filter for valid external links with descriptive text
-                if href.startswith("http") and "duckduckgo" not in href and len(snippet) > 15:
+                # Unpack Yahoo redirect URLs to get the true destination
+                if "RU=" in raw_link:
+                    raw_link = urllib.parse.unquote(raw_link.split("RU=")[1].split("/RK=")[0])
+                
+                # Check if the link goes to one of our target platforms and isn't a Yahoo internal link
+                if any(domain in raw_link for domain in target_domains) and "yahoo.com" not in raw_link and len(snippet) > 20:
                     
                     category_tag = "Voice Acting"
-                    if "linkedin" in href or "behance" in href:
+                    if "linkedin" in raw_link or "behance" in raw_link:
                         category_tag = "Commercial Print/Modeling"
-                    elif any(domain in href for domain in ["upwork", "peopleperhour", "freelancer", "guru"]):
+                    elif any(domain in raw_link for domain in ["upwork", "peopleperhour", "freelancer", "guru", "fiverr"]):
                         category_tag = "Corporate/ELT"
-                    elif "x.com" in href or "twitter.com" in href:
+                    elif "x.com" in raw_link or "twitter.com" in raw_link:
                         category_tag = "Animation"
 
                     opportunities.append({
@@ -286,7 +282,7 @@ def scrape_open_web_search(logs):
                         "source": label,
                         "category": category_tag,
                         "posted_date": datetime.now().strftime("%Y-%m-%d"),
-                        "apply_url": href,
+                        "apply_url": raw_link,
                         "pay_type": "Paid" if any(w in snippet.lower() for w in ["paid", "$", "£", "fee", "budget"]) else "Unpaid Opportunity",
                         "rate_budget": "Open Rate / See Listing",
                         "job_desc": f"Found via open casting search: {snippet}\n\n[REQ_METADATA|Sex:Any|Age:25-45|Accents:RP, General British|Style:Warm, Articulate]"
@@ -302,10 +298,11 @@ def run_all_scrapers():
     logs = []
     results = []
     
-    # Fetching from the newly updated functions
-    results.extend(scrape_reddit_json(logs))
+    # Run the newly updated proxy and engine functions
+    results.extend(scrape_reddit_rss2json(logs))
     results.extend(scrape_open_web_search(logs))
     
+    # Deduplicate results by URL
     seen_links = set()
     deduped = []
     for r in results:
@@ -313,7 +310,6 @@ def run_all_scrapers():
             seen_links.add(r["apply_url"])
             deduped.append(r)
     return deduped, logs
-
 # -----------------------------------------------------------------------------
 # 5. AUTHENTICATION & ONBOARDING GATEKEEPER
 # -----------------------------------------------------------------------------

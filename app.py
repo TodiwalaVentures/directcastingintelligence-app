@@ -154,101 +154,67 @@ def sanitize_url(url: str) -> str:
 # 4. HIGH-YIELD SCRAPING ENGINE (CASTING CALL CLUB, BLUESKY, REDDIT, NEWGROUNDS)
 # -----------------------------------------------------------------------------
 def fetch_live_casting_opportunities(user_id):
-    """Fetches maximum live casting calls across open APIs, websites, and feeds."""
+    """Fetches live casting calls across RSS feeds, Reddit JSON APIs, and open boards."""
     scraped_jobs = []
     scrape_errors = []
     today_str = str(datetime.now().date())
     deadline_str = str((datetime.now() + timedelta(days=14)).date())
     
-    # Modern browser User-Agent header to bypass standard anti-bot 403 blocks
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.9'
+    # 1. VOICE ACTING CLUB (RSS FEEDS - Highly Reliable Static XML)
+    vac_feeds = [
+        ("Voice Acting Club (Paid)", "https://voiceacting.boards.net/board/11/casting-calls-paid/rss", "Paid"),
+        ("Voice Acting Club (Unpaid)", "https://voiceacting.boards.net/board/22/casting-calls-unpaid/rss", "Unpaid Opportunity")
+    ]
+    
+    vac_headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
     }
 
-    # 1. LIVE SCRAPE: Casting Call Club (https://www.castingcall.club/find_jobs)
-    try:
-        ccc_url = "https://www.castingcall.club/find_jobs"
-        req = urllib.request.Request(ccc_url, headers=headers)
-        with urllib.request.urlopen(req, timeout=6) as resp:
-            html = resp.read().decode('utf-8', errors='ignore')
-            
-            # Extract project links from find_jobs page using regex matching /projects/
-            project_matches = re.findall(r'/projects/([a-zA-Z0-9-]+)"[^>]*>(.*?)</a>', html, re.DOTALL)
-            
-            seen_ids = set()
-            for p_id, raw_title in project_matches:
-                clean_title = re.sub(r'<[^<]+?>', '', raw_title).strip()
-                if not clean_title or len(clean_title) < 3 or p_id in seen_ids:
-                    continue
-                seen_ids.add(p_id)
-                
-                p_url = f"https://www.castingcall.club/projects/{p_id}"
-                scraped_jobs.append((
-                    user_id, f"[CCC] {clean_title[:75]}", "Casting Call Club Creator", "Casting Call Club - find_jobs",
-                    "Video Games", today_str, deadline_str, "🌍 Worldwide Remote", "Direct Web Application", "", p_url,
-                    "$150 - $400 / Commercial Project", "Paid", "Open casting call posted on Casting Call Club (find_jobs).", "Male", "20-40", "General British, US, RP", "Energetic, Grounded"
-                ))
-            
-            # Fallback to CCC public search API endpoint if HTML parsing returns fewer than 3 items
-            if len(seen_ids) < 3:
-                api_req = urllib.request.Request("https://www.castingcall.club/api/v1/projects?limit=20", headers=headers)
-                try:
-                    with urllib.request.urlopen(api_req, timeout=4) as api_resp:
-                        data = json.loads(api_resp.read().decode('utf-8'))
-                        for proj in data.get('projects', []):
-                            p_title = proj.get('title', 'CCC Open Casting Project')
-                            p_id = proj.get('id', '')
-                            p_url = f"https://www.castingcall.club/projects/{p_id}" if p_id else ccc_url
-                            p_desc = proj.get('description', 'Casting Call Club open project audition call.')[:250].strip()
-                            scraped_jobs.append((
-                                user_id, f"[CCC] {p_title[:75]}", "Casting Call Club Creator", "Casting Call Club - Website",
-                                "Video Games", today_str, deadline_str, "🌍 Worldwide Remote", "Direct Web Application", "", p_url,
-                                "$150 - $400 / Commercial Project", "Paid", p_desc, "Male", "20-40", "General British, US, RP", "Energetic, Grounded"
-                            ))
-                except Exception:
-                    pass
-
-    except Exception as e:
-        scrape_errors.append(f"Casting Call Club (find_jobs): {e}")
-
-    # 2. LIVE SCRAPE: Bluesky Public Search API (100% Open & Unauthenticated)
-    try:
-        bsky_search_terms = ["casting call voice", "voice actor needed", "voice artist needed", "looking for voice actor"]
-        for term in bsky_search_terms[:2]:
-            encoded_term = urllib.parse.quote(term)
-            bsky_endpoint = f"https://public.api.bsky.app/xrpc/app.bsky.feed.searchPosts?q={encoded_term}&limit=10"
-            req = urllib.request.Request(bsky_endpoint, headers=headers)
-            with urllib.request.urlopen(req, timeout=5) as resp:
-                data = json.loads(resp.read().decode('utf-8'))
-                posts = data.get('posts', [])
-                for p in posts:
-                    author_handle = p.get('author', {}).get('handle', 'Bluesky User')
-                    record = p.get('record', {})
-                    text = record.get('text', 'Bluesky casting notice')[:250].strip()
-                    rkey = p.get('uri', '').split('/')[-1]
-                    post_url = f"https://bsky.app/profile/{author_handle}/post/{rkey}" if rkey else "https://bsky.app"
+    for feed_name, feed_url, pay_status in vac_feeds:
+        try:
+            req = urllib.request.Request(feed_url, headers=vac_headers)
+            with urllib.request.urlopen(req, timeout=6) as resp:
+                xml_data = resp.read().decode('utf-8', errors='ignore')
+                root = ET.fromstring(xml_data)
+                for item in root.findall(".//item"):
+                    title = item.find("title").text if item.find("title") is not None else "VAC Casting Call"
+                    link = item.find("link").text if item.find("link") is not None else feed_url
+                    desc = item.find("description").text if item.find("description") is not None else "Open casting call posted on Voice Acting Club."
+                    clean_desc = re.sub(r'<[^<]+?>', '', desc)[:250].strip()
                     
-                    first_line = text.splitlines()[0] if text else f"Casting Call from @{author_handle}"
-                    title = first_line[:70]
                     scraped_jobs.append((
-                        user_id, f"[BLUESKY] {title}", f"@{author_handle}", "Bluesky Social",
-                        "Animation", today_str, deadline_str, "🌍 Worldwide Remote", "Direct Web Application", "", post_url,
-                        "Indie / Commercial Rate", "Paid" if "paid" in text.lower() else "Unpaid Opportunity",
-                        text, "Any", "20-50", "RP, General British, US", "Character, Conversational"
+                        user_id, 
+                        f"[VAC] {title[:75]}", 
+                        "VAC Community Creator", 
+                        feed_name,
+                        "Animation", 
+                        today_str, 
+                        deadline_str, 
+                        "🌍 Worldwide Remote", 
+                        "Direct Web Application", 
+                        "", 
+                        link,
+                        "Indie / Standard Rate" if pay_status == "Paid" else "Volunteer / Portfolio", 
+                        pay_status, 
+                        clean_desc if clean_desc else "Voice Acting Club Casting Notice.", 
+                        "Any", "20-50", "RP, General British, US", "Character, Conversational"
                     ))
-    except Exception as e:
-        scrape_errors.append(f"Bluesky Public API: {e}")
+        except Exception as e:
+            scrape_errors.append(f"{feed_name}: {e}")
 
-    # 3. LIVE SCRAPE: Reddit Subreddits (With Fixed User-Agent Headers)
-    reddit_subs = ["recordthis", "VoiceActing", "CastingSeeks", "VoiceOver", "INAT", "Audiodrama", "IndieDev", "gamedev", "CastingCalls"]
-    reddit_keywords = ['paid', 'casting', 'hiring', 'looking for', 'casting call', 'voice actor', 'voice artist', 'va needed', 'audition', 'narrator needed']
+    # 2. REDDIT SUBREDDITS (FIXED UNIQUE USER-AGENT TO PREVENT HTTP 429 BLOCKS)
+    reddit_subs = ["recordthis", "VoiceActing", "VoiceOver", "INAT", "Audiodrama"]
+    reddit_keywords = ['paid', 'casting', 'hiring', 'looking for', 'casting call', 'voice actor', 'voice artist', 'audition', 'narrator']
     
+    # Critical Fix: Custom App User-Agent string bypasses Reddit's 429/403 scraper block
+    reddit_headers = {
+        'User-Agent': 'python:com.todiwalaventures.dci:v1.0.0 (by /u/DCI_Casting_Engine)'
+    }
+
     for sub in reddit_subs:
         try:
-            r_req = urllib.request.Request(f"https://www.reddit.com/r/{sub}/new.json?limit=8", headers=headers)
-            with urllib.request.urlopen(r_req, timeout=4) as resp:
+            r_req = urllib.request.Request(f"https://www.reddit.com/r/{sub}/new.json?limit=10", headers=reddit_headers)
+            with urllib.request.urlopen(r_req, timeout=5) as resp:
                 r_data = json.loads(resp.read().decode('utf-8'))
                 posts = r_data.get('data', {}).get('children', [])
                 for p in posts:
@@ -256,16 +222,65 @@ def fetch_live_casting_opportunities(user_id):
                     r_title = pdata.get('title', 'Reddit Casting Query')
                     r_permalink = f"https://www.reddit.com{pdata.get('permalink', '')}"
                     r_text = pdata.get('selftext', 'Open casting query posted on Reddit.')[:250].strip()
+                    
                     if any(kw in r_title.lower() or kw in r_text.lower() for kw in reddit_keywords):
+                        is_paid = "[paid]" in r_title.lower() or "paid" in r_title.lower()
                         scraped_jobs.append((
-                            user_id, f"[{sub.upper()}] {r_title[:70]}", f"Reddit User u/{pdata.get('author', 'Client')}", f"Reddit (/r/{sub})",
+                            user_id, 
+                            f"[{sub.upper()}] {r_title[:70]}", 
+                            f"u/{pdata.get('author', 'Client')}", 
+                            f"Reddit (/r/{sub})",
                             "Corporate/ELT" if sub == "recordthis" else ("Audiobooks" if sub == "Audiodrama" else "Video Games"), 
-                            today_str, deadline_str, "🌍 Worldwide Remote", "Direct Web Application", "", r_permalink,
-                            "$100 - $350 / Project Rate", "Paid" if "[paid]" in r_title.lower() or "paid" in r_title.lower() else "Unpaid Opportunity",
-                            r_text if r_text else "Reddit open audition call.", "Any", "20-50", "RP, General British", "Warm, Conversational"
+                            today_str, 
+                            deadline_str, 
+                            "🌍 Worldwide Remote", 
+                            "Direct Web Application", 
+                            "", 
+                            r_permalink,
+                            "$100 - $350 / Project Rate" if is_paid else "Unpaid Opportunity", 
+                            "Paid" if is_paid else "Unpaid Opportunity",
+                            r_text if r_text else "Reddit open audition call.", 
+                            "Any", "20-50", "RP, General British", "Warm, Conversational"
                         ))
         except Exception as e:
             scrape_errors.append(f"Reddit /r/{sub}: {e}")
+
+    # 3. BLUESKY PUBLIC SEARCH API
+    try:
+        bsky_endpoint = "https://public.api.bsky.app/xrpc/app.bsky.feed.searchPosts?q=casting%20call%20voice&limit=8"
+        req = urllib.request.Request(bsky_endpoint, headers={'User-Agent': 'DCI-App/1.0'})
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read().decode('utf-8'))
+            posts = data.get('posts', [])
+            for p in posts:
+                author_handle = p.get('author', {}).get('handle', 'Bluesky User')
+                record = p.get('record', {})
+                text = record.get('text', 'Bluesky casting notice')[:250].strip()
+                rkey = p.get('uri', '').split('/')[-1]
+                post_url = f"https://bsky.app/profile/{author_handle}/post/{rkey}" if rkey else "https://bsky.app"
+                
+                title = text.splitlines()[0][:70] if text else f"Casting Call from @{author_handle}"
+                scraped_jobs.append((
+                    user_id, 
+                    f"[BLUESKY] {title}", 
+                    f"@{author_handle}", 
+                    "Bluesky Social",
+                    "Animation", 
+                    today_str, 
+                    deadline_str, 
+                    "🌍 Worldwide Remote", 
+                    "Direct Web Application", 
+                    "", 
+                    post_url,
+                    "Indie Rate", 
+                    "Paid" if "paid" in text.lower() else "Unpaid Opportunity",
+                    text, 
+                    "Any", "20-50", "RP, General British, US", "Character, Conversational"
+                ))
+    except Exception as e:
+        scrape_errors.append(f"Bluesky Public API: {e}")
+
+    return scraped_jobs, scrape_errors
 
     # 4. LIVE SCRAPE: Newgrounds Collaboration Board (Animation & Game VO)
     try:

@@ -158,30 +158,108 @@ def sanitize_url(url: str) -> str:
 # 4. DYNAMIC LIVE WEB SCRAPER ENGINE
 # -----------------------------------------------------------------------------
 SCRAPER_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0.0.0 Safari/537.36",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.5",
 }
 
+def scrape_twine_direct(logs):
+    """Directly scrapes active listings from Twine's voiceover artist board."""
+    opportunities = []
+    url = "https://www.twine.net/jobs/voiceover-artists"
+    try:
+        res = requests.get(url, headers=SCRAPER_HEADERS, timeout=12)
+        if res.status_code != 200:
+            logs.append(f"Twine Direct: HTTP Error {res.status_code}")
+            return opportunities
+            
+        soup = BeautifulSoup(res.text, "html.parser")
+        
+        for a_tag in soup.find_all("a", href=True):
+            href = a_tag.get("href", "")
+            if "/jobs/" in href and len(href) > 10:
+                full_url = href if href.startswith("http") else f"https://www.twine.net{href}"
+                snippet = a_tag.get_text(strip=True)
+                
+                if len(snippet) > 25 and any(w in snippet.lower() for w in ["voice", "audio", "artist", "narrator", "vo", "acting"]):
+                    pay_keywords = ["paid", "$", "£", "€", "fee", "budget", "rate", "compensation", "stipend"]
+                    is_paid = any(w in snippet.lower() for w in pay_keywords)
+                    
+                    opportunities.append({
+                        "title": snippet[:100] + "...",
+                        "company": "Twine Direct Board",
+                        "source": "Twine Direct",
+                        "category": "Voice Acting",
+                        "posted_date": datetime.now().strftime("%Y-%m-%d"),
+                        "apply_url": full_url,
+                        "pay_type": "Paid" if is_paid else "Unpaid Opportunity",
+                        "rate_budget": "Paid Project" if is_paid else "Open Rate / Negotiable",
+                        "job_desc": f"{snippet}\n\n[REQ_METADATA|Sex:Any|Age:25-45|Accents:Any|Style:Professional]"
+                    })
+    except Exception as e:
+        logs.append(f"Twine Direct: {str(e)}")
+        
+    return opportunities
+
+
+def scrape_casting_networks_direct(logs):
+    """Directly scrapes active voice-over auditions from Casting Networks."""
+    opportunities = []
+    url = "https://www.castingnetworks.com/voice-over-auditions/"
+    try:
+        res = requests.get(url, headers=SCRAPER_HEADERS, timeout=12)
+        if res.status_code != 200:
+            logs.append(f"Casting Networks Direct: HTTP Error {res.status_code}")
+            return opportunities
+            
+        soup = BeautifulSoup(res.text, "html.parser")
+        
+        for a_tag in soup.find_all("a", href=True):
+            href = a_tag.get("href", "")
+            if any(p in href for p in ["/role/", "/audition/", "/job/"]) or "castingnetworks.com" in href:
+                full_url = href if href.startswith("http") else f"https://www.castingnetworks.com{href}"
+                snippet = a_tag.get_text(strip=True)
+                
+                if len(snippet) > 20 and not any(skip in full_url for skip in ["/profile/", "/talent/", "/login", "/pricing"]):
+                    pay_keywords = ["paid", "$", "£", "€", "fee", "budget", "rate", "compensation"]
+                    is_paid = any(w in snippet.lower() for w in pay_keywords)
+                    
+                    opportunities.append({
+                        "title": snippet[:100] + "...",
+                        "company": "Casting Networks Direct",
+                        "source": "Casting Networks",
+                        "category": "Voice Acting",
+                        "posted_date": datetime.now().strftime("%Y-%m-%d"),
+                        "apply_url": full_url,
+                        "pay_type": "Paid" if is_paid else "Unpaid Opportunity",
+                        "rate_budget": "Paid Casting" if is_paid else "See Listing",
+                        "job_desc": f"{snippet}\n\n[REQ_METADATA|Sex:Any|Age:25-45|Accents:Any|Style:Commercial/Narration]"
+                    })
+    except Exception as e:
+        logs.append(f"Casting Networks Direct: {str(e)}")
+        
+    return opportunities
+
+
 def scrape_open_web_search(logs):
     """
-    Precision scraper targeting live job listings using Casting Networks,
-    Casting Call Club (/find_jobs), Twine, and Reddit casting boards.
+    Precision search scraper targeting LinkedIn (Jobs & Posts filters), 
+    Casting Call Club (/find_jobs), and Reddit voice casting communities.
     """
     opportunities = []
     
     queries = [
         (
-            "Casting Networks Voice Auditions",
-            'site:castingnetworks.com/voice-over-auditions/ ("voice-over" OR "voiceover" OR "VO" OR "audition" OR "commercial" OR "actor")'
+            "LinkedIn Jobs (Contract/Remote)",
+            'site:linkedin.com/jobs ("voice over" OR "voice actor" remote OR "voice talent" freelance OR "VO artist" hiring OR "narration" voice actor contract OR "looking for a voice actor" OR "e-learning narrator" freelance OR "seeking voice talent")'
+        ),
+        (
+            "LinkedIn Posts (Casting & Outreach)",
+            'site:linkedin.com/posts ("voice over" OR "voice actor" remote OR "voice talent" freelance OR "VO artist" hiring OR "narration" voice actor contract OR "looking for a voice actor" OR "e-learning narrator" freelance OR "seeking voice talent")'
         ),
         (
             "Casting Call Club Jobs",
             'site:castingcall.club/find_jobs ("voice actor" OR "audition" OR "character voice" OR "paid voice" OR "actor")'
-        ),
-        (
-            "Twine Voice & Audio Gigs",
-            'site:twine.net/jobs/ ("voiceover" OR "voice actor" OR "actor" OR "audio engineer" OR "podcast" OR "voice artist")'
         ),
         (
             "Reddit Voice Casting Boards",
@@ -218,12 +296,7 @@ def scrape_open_web_search(logs):
                         pass
                 
                 if raw_link.startswith("http") and "yahoo.com" not in raw_link:
-                    
-                    # Blocklist to prevent profiles and forum noise from entering Tab 1
-                    skip_patterns = [
-                        "/talent/public-profile/", "/profile/", "/user/", 
-                        "/forums/", "/community/thread/", "/discuss/", "/talent/", "/pricing", "/faq"
-                    ]
+                    skip_patterns = ["/talent/public-profile/", "/profile/", "/user/", "/forums/", "/pricing", "/faq"]
                     if any(pattern in raw_link for pattern in skip_patterns):
                         continue
 
@@ -238,9 +311,7 @@ def scrape_open_web_search(logs):
                     category_tag = "Voice Acting"
                     if "audiodrama" in raw_link or "recordthis" in raw_link:
                         category_tag = "Audiobooks"
-                    elif "castingnetworks" in raw_link:
-                        category_tag = "Voice Acting"
-                    elif "twine.net" in raw_link:
+                    elif "linkedin.com" in raw_link:
                         category_tag = "Corporate/ELT" if "corporate" in snippet_lower else "Voice Acting"
 
                     is_paid = any(w in snippet_lower for w in pay_keywords)
@@ -267,7 +338,9 @@ def run_all_scrapers():
     logs = []
     results = []
     
-    # Executes robust Yahoo search indexer covering Reddit and all target platforms
+    # Run direct DOM scrubbers and targeted search queries together
+    results.extend(scrape_twine_direct(logs))
+    results.extend(scrape_casting_networks_direct(logs))
     results.extend(scrape_open_web_search(logs))
     
     seen_links = set()

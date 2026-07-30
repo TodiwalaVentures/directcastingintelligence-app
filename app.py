@@ -299,6 +299,7 @@ def run_all_scrapers():
             deduped.append(r)
             
     return deduped, logs
+
 # -----------------------------------------------------------------------------
 # 5. AUTHENTICATION & ONBOARDING GATEKEEPER
 # -----------------------------------------------------------------------------
@@ -394,8 +395,8 @@ else:
                 conn = get_db_connection()
                 c = conn.cursor()
                 c.execute("""INSERT INTO profile 
-                             (user_id, age_range, sex, height, hair_color, eye_color, primary_base, spotlight_url, accent, voice_desc, included_genres, excluded_genres, union_status, pay_preference) 
-                             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""", 
+                            (user_id, age_range, sex, height, hair_color, eye_color, primary_base, spotlight_url, accent, voice_desc, included_genres, excluded_genres, union_status, pay_preference) 
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""", 
                           (user_id, o_age, o_sex, o_height, "Dark Brown", "Brown", o_base, o_spotlight, o_accent, o_desc, 
                            "Screen/Film/TV,Theatre/Stage,Commercial Print/Modeling,Corporate/ELT,Animation,Video Games", 
                            "Erotica/Adult", "Equity UK / Spotlight Registered", "Both Paid Roles & Unpaid Opportunities"))
@@ -468,9 +469,9 @@ else:
 
                     if jobs_to_insert:
                         c.executemany("""INSERT INTO active_jobs 
-                                         (user_id, title, company, source, category, posted_date, deadline, region_location, app_method, contact_email, apply_url, rate_budget, pay_type, job_desc, status) 
-                                         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""", 
-                                      jobs_to_insert)
+                                       (user_id, title, company, source, category, posted_date, deadline, region_location, app_method, contact_email, apply_url, rate_budget, pay_type, job_desc, status) 
+                                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""", 
+                                    jobs_to_insert)
                         conn.commit()
                         st.success(f"Added {len(jobs_to_insert)} unique live casting calls from scrapers!")
                     else:
@@ -517,7 +518,7 @@ else:
             if not jobs:
                 st.info("No active opportunities loaded. Click '🔄 Scrub Open Casting Directories Now' above.")
             else:
-                for job in jobs:
+                for i, job in enumerate(jobs):
                     j_id, title, company, source, category, posted_date, deadline, region_loc, app_method, contact_email, apply_url, rate_budget, pay_type, job_desc = job
                     
                     req_sex, req_age, req_accents, req_style = "Any", "Unspecified", "Any", "General"
@@ -565,13 +566,12 @@ else:
                         st.divider()
 
                         col1, col2, col3 = st.columns(3)
-with col1:
-    # This specifically grabs the URL the scraper found and turns it into a clickable button
-    st.link_button("View Original Post | Source", opp["apply_url"])
-with col2:
-    st.button("Apply via Web Portal", key=f"apply_{i}")
-with col3:
-    st.button("Save to Vault", key=f"save_{i}")
+                        with col1:
+                            st.link_button("🌐 View Original Post | Source", apply_url)
+                        with col2:
+                            st.button("Apply via Web Portal", key=f"apply_{j_id}")
+                        with col3:
+                            st.button("Save to Vault", key=f"save_{j_id}")
 
         # ---------------------------------------------------------------------
         # TAB 2: CONTACT INTELLIGENCE HUB (CRM + SOCIALS + DEEP-DIG)
@@ -600,8 +600,8 @@ with col3:
                             conn = get_db_connection()
                             c = conn.cursor()
                             c.execute("""INSERT INTO crm_contacts 
-                                         (user_id, name, studio, role, email, linkedin, youtube, instagram, genre, last_project, last_contact, contact_type) 
-                                         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                                       (user_id, name, studio, role, email, linkedin, youtube, instagram, genre, last_project, last_contact, contact_type) 
+                                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
                                       (user_id, m_name, m_studio, m_role, m_email, m_linkedin, m_youtube, m_instagram, m_genre, m_notes, datetime.now().strftime("%Y-%m-%d"), "Manual Entry"))
                             conn.commit()
                             conn.close()
@@ -741,7 +741,7 @@ Spotlight Profile: {u_spotlight}{gdpr_footer}"""
                 {"Category": "Commercial & Corporate Roster", "Name": "Voquent", "Submission Type": "Free Platform Profile", "Action": "Create Voice Profile"}
             ]
             df_vault = pd.DataFrame(vault_data)
-            st.dataframe(df_vault, width="stretch")
+            st.dataframe(df_vault, use_container_width=True)
 
         # ---------------------------------------------------------------------
         # TAB 5: SPOTLIGHT PROFILE & GDPR PRIVACY CONTROLS
@@ -788,8 +788,8 @@ Spotlight Profile: {u_spotlight}{gdpr_footer}"""
                     conn = get_db_connection()
                     c = conn.cursor()
                     c.execute("""UPDATE profile SET age_range=%s, sex=%s, height=%s, hair_color=%s, eye_color=%s, 
-                                                 primary_base=%s, spotlight_url=%s, accent=%s, voice_desc=%s, union_status=%s, pay_preference=%s 
-                                                 WHERE user_id=%s""", 
+                                               primary_base=%s, spotlight_url=%s, accent=%s, voice_desc=%s, union_status=%s, pay_preference=%s 
+                                               WHERE user_id=%s""", 
                               (age_val, sex_val, height_val, hair_val, eye_val, base_val, spotlight_val, accent_val, desc_val, union_val, pay_pref_choice, user_id))
                     conn.commit()
                     conn.close()

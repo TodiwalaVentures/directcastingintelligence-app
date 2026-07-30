@@ -155,30 +155,30 @@ def sanitize_url(url: str) -> str:
     return "#"
 
 # -----------------------------------------------------------------------------
-# 4. DYNAMIC LIVE WEB SCRAPER ENGINE (FEED-FIRST ARCHITECTURE)
+# 4. DYNAMIC LIVE WEB SCRAPER ENGINE (PROXY-BYPASS ARCHITECTURE)
 # -----------------------------------------------------------------------------
 SCRAPER_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+    "Accept": "application/json, text/xml, application/xml, text/html",
 }
 
 def scrape_reddit_json(logs):
-    """Scrapes Reddit voice actor boards using native JSON to bypass RSS formatting crashes."""
+    """Scrapes Reddit using native JSON routed through a free proxy to bypass 403 IP bans."""
     subreddits = ["VoiceActing", "RecordThis", "audiodrama"]
     opportunities = []
     keywords = ["casting", "hiring", "paid", "va needed", "voice artist", "voice actor", "looking for voice", "audition"]
     
-    # Custom User-Agent required by Reddit API guidelines to prevent IP blocks
-    reddit_headers = {"User-Agent": "python:dci.casting.hub:v3.0 (by /u/HomerT)"}
-    
     for sub in subreddits:
         source_label = f"Reddit /r/{sub}"
-        url = f"https://www.reddit.com/r/{sub}/new.json?limit=20"
+        # Route through AllOrigins raw proxy to bypass Reddit Datacenter IP blocks
+        target_url = urllib.parse.quote(f"https://www.reddit.com/r/{sub}/new.json?limit=20")
+        proxy_url = f"https://api.allorigins.win/raw?url={target_url}"
+        
         try:
-            time.sleep(1.5)
-            res = requests.get(url, headers=reddit_headers, timeout=10)
+            time.sleep(1.0)
+            res = requests.get(proxy_url, headers=SCRAPER_HEADERS, timeout=15)
             if res.status_code != 200:
-                logs.append(f"{source_label}: HTTP Error {res.status_code}")
+                logs.append(f"{source_label}: Proxy HTTP Error {res.status_code}")
                 continue
                 
             data = res.json()
@@ -210,17 +210,18 @@ def scrape_reddit_json(logs):
 
 
 def scrape_upwork_rss(logs):
-    """Direct integration with Upwork's native RSS feed for high-value B2B/Corporate Voiceover contracts."""
+    """Direct integration with Upwork's RSS feed via proxy to bypass Cloudflare 403 blocks."""
     opportunities = []
-    url = "https://www.upwork.com/ab/feed/jobs/rss?q=%22voice+over%22"
+    target_url = urllib.parse.quote("https://www.upwork.com/ab/feed/jobs/rss?q=%22voice+over%22")
+    proxy_url = f"https://api.allorigins.win/raw?url={target_url}"
     
     try:
-        res = requests.get(url, headers=SCRAPER_HEADERS, timeout=10)
+        time.sleep(1.0)
+        res = requests.get(proxy_url, headers=SCRAPER_HEADERS, timeout=15)
         if res.status_code != 200:
-            logs.append(f"Upwork RSS: HTTP Error {res.status_code}")
+            logs.append(f"Upwork RSS: Proxy HTTP Error {res.status_code}")
             return opportunities
             
-        # html.parser handles standard RSS XML efficiently without needing external lxml libraries
         soup = BeautifulSoup(res.content, "html.parser")
         
         for item in soup.find_all("item"):
@@ -247,12 +248,11 @@ def scrape_upwork_rss(logs):
 
 def scrape_bing_rss_search(logs):
     """
-    Bypasses JavaScript rendering blocks and DDG CAPTCHAs by exploiting Bing's native XML search feeds.
-    Pulls pre-rendered indexed data from SPAs like Twine, LinkedIn, and Casting Call Club.
+    Scrapes pre-rendered index data from SPAs like Twine and Casting Call Club.
+    Includes an aggressive spam filter to kill Bing Ad injections (e.g., 'Google Voice Phone').
     """
     opportunities = []
     
-    # Precision site-search queries
     queries = [
         ("Casting Call Club", 'site:castingcall.club/find_jobs "voice actor" OR "audition" OR "character"'),
         ("Twine Jobs", 'site:twine.net/jobs "voiceover" OR "voice actor" OR "voice artist"'),
@@ -262,12 +262,17 @@ def scrape_bing_rss_search(logs):
     
     pay_keywords = ["paid", "$", "£", "€", "fee", "budget", "rate", "compensation", "stipend", "hiring", "salary"]
     
+    # Strict filter to drop Bing Ads and irrelevant tech jobs
+    spam_keywords = ["business phone", "google voice", "voip", "telephone", "customer service", "pbx", "telecom"]
+    valid_keywords = ["voice", "actor", "audition", "casting", "narrator", "vo", "recording"]
+
     for label, query in queries:
-        # Appending &format=rss returns XML data instead of HTML, completely avoiding bot walls
-        url = f"https://www.bing.com/search?q={urllib.parse.quote(query)}&format=rss"
+        target_url = urllib.parse.quote(f"https://www.bing.com/search?q={urllib.parse.quote(query)}&format=rss")
+        proxy_url = f"https://api.allorigins.win/raw?url={target_url}"
+        
         try:
-            time.sleep(2.0)
-            res = requests.get(url, headers=SCRAPER_HEADERS, timeout=12)
+            time.sleep(1.0)
+            res = requests.get(proxy_url, headers=SCRAPER_HEADERS, timeout=15)
             if res.status_code != 200:
                 logs.append(f"{label} (Bing RSS): HTTP Error {res.status_code}")
                 continue
@@ -279,8 +284,19 @@ def scrape_bing_rss_search(logs):
                 link = item.find("link").get_text(strip=True) if item.find("link") else ""
                 desc = item.find("description").get_text(strip=True) if item.find("description") else ""
                 
-                # Filter out pure navigation/login links that search engines accidentally index
+                title_lower = title.lower()
+                desc_lower = desc.lower()
+
+                # 1. Kill Bing Ads and tech spam instantly
+                if any(spam in title_lower or spam in desc_lower for spam in spam_keywords):
+                    continue
+                
+                # 2. Kill generic navigation/login links
                 if any(x in link.lower() for x in ["/login", "/signup", "/privacy", "/terms", "/pricing"]):
+                    continue
+                
+                # 3. Ensure the listing actually talks about casting/acting
+                if not any(valid in title_lower or valid in desc_lower for valid in valid_keywords):
                     continue
                 
                 if len(title) > 10:
@@ -288,7 +304,7 @@ def scrape_bing_rss_search(logs):
                     if "linkedin" in link:
                         category_tag = "Corporate/ELT"
                     
-                    is_paid = any(w in title.lower() or w in desc.lower() for w in pay_keywords)
+                    is_paid = any(w in title_lower or w in desc_lower for w in pay_keywords)
                     
                     opportunities.append({
                         "title": title[:100] + "...",
@@ -312,12 +328,11 @@ def run_all_scrapers():
     logs = []
     results = []
     
-    # Execute the Feed-First engine
+    # Run all proxy-bypassed scrapers
     results.extend(scrape_reddit_json(logs))
     results.extend(scrape_upwork_rss(logs))
     results.extend(scrape_bing_rss_search(logs))
     
-    # Deduplicate results based on URL to prevent feed overlap
     seen_links = set()
     deduped = []
     for r in results:

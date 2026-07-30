@@ -159,7 +159,7 @@ def sanitize_url(url: str) -> str:
 # -----------------------------------------------------------------------------
 SCRAPER_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.5",
 }
 
@@ -243,7 +243,7 @@ def scrape_casting_networks_direct(logs):
 
 def scrape_open_web_search(logs):
     """
-    Precision search scraper targeting LinkedIn (Jobs & Posts filters), 
+    Precision search scraper using DuckDuckGo HTML targeting LinkedIn, 
     Casting Call Club (/find_jobs), and Reddit voice casting communities.
     """
     opportunities = []
@@ -251,11 +251,11 @@ def scrape_open_web_search(logs):
     queries = [
         (
             "LinkedIn Jobs (Contract/Remote)",
-            'site:linkedin.com/jobs ("voice over" OR "voice actor" remote OR "voice talent" freelance OR "VO artist" hiring OR "narration" voice actor contract OR "looking for a voice actor" OR "e-learning narrator" freelance OR "seeking voice talent")'
+            'site:linkedin.com/jobs ("voice over" OR "voice actor" remote OR "voice talent" freelance OR "VO artist" hiring OR "narration" voice actor contract)'
         ),
         (
-            "LinkedIn Posts (Casting & Outreach)",
-            'site:linkedin.com/posts ("voice over" OR "voice actor" remote OR "voice talent" freelance OR "VO artist" hiring OR "narration" voice actor contract OR "looking for a voice actor" OR "e-learning narrator" freelance OR "seeking voice talent")'
+            "LinkedIn Posts (Casting Calls)",
+            'site:linkedin.com/posts ("voice over" OR "voice actor" OR "VO artist" hiring OR "looking for a voice actor" OR "seeking voice talent")'
         ),
         (
             "Casting Call Club Jobs",
@@ -267,67 +267,69 @@ def scrape_open_web_search(logs):
         )
     ]
 
-    yahoo_headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-    }
-    
     pay_keywords = ["paid", "$", "£", "€", "fee", "budget", "rate", "compensation", "stipend", "hiring", "salary"]
 
     for label, search_query in queries:
-        url = f"https://search.yahoo.com/search?p={urllib.parse.quote(search_query)}"
+        url = f"https://html.duckduckgo.com/html/?q={urllib.parse.quote(search_query)}"
         try:
-            time.sleep(2.0)
-            res = requests.get(url, headers=yahoo_headers, timeout=10)
+            time.sleep(2.5)
+            res = requests.get(url, headers=SCRAPER_HEADERS, timeout=12)
             
             if res.status_code != 200:
                 logs.append(f"{label}: HTTP Error {res.status_code}")
                 continue
                 
             soup = BeautifulSoup(res.text, "html.parser")
-            
-            for a_tag in soup.find_all("a"):
-                raw_link = a_tag.get("href", "")
-                snippet = a_tag.get_text(strip=True)
-                
-                if "RU=" in raw_link:
-                    try:
-                        raw_link = urllib.parse.unquote(raw_link.split("RU=")[1].split("/RK=")[0])
-                    except Exception:
-                        pass
-                
-                if raw_link.startswith("http") and "yahoo.com" not in raw_link:
-                    skip_patterns = ["/talent/public-profile/", "/profile/", "/user/", "/forums/", "/pricing", "/faq"]
-                    if any(pattern in raw_link for pattern in skip_patterns):
-                        continue
+            results = soup.find_all("div", class_="result__body")
 
-                    path_parts = raw_link.replace("https://", "").replace("http://", "").split("/")
-                    if len(path_parts) < 3:
-                        continue
+            for result in results:
+                title_elem = result.find("a", class_="result__url")
+                snippet_elem = result.find("a", class_="result__snippet")
+
+                if title_elem and snippet_elem:
+                    snippet = snippet_elem.get_text().strip()
+                    raw_link = title_elem["href"]
+
+                    if "uddg=" in raw_link:
+                        try:
+                            raw_link = urllib.parse.unquote(raw_link.split("uddg=")[1].split("&")[0])
+                        except Exception:
+                            pass
                     
-                    snippet_lower = snippet.lower()
-                    if not any(k in snippet_lower for k in ["voice", "actor", "audition", "casting", "narrator", "vo", "recording"]):
-                        continue
+                    if raw_link.startswith("http") and "duckduckgo" not in raw_link:
+                        skip_patterns = ["/talent/public-profile/", "/profile/", "/user/", "/forums/", "/pricing", "/faq"]
+                        if any(pattern in raw_link for pattern in skip_patterns):
+                            continue
 
-                    category_tag = "Voice Acting"
-                    if "audiodrama" in raw_link or "recordthis" in raw_link:
-                        category_tag = "Audiobooks"
-                    elif "linkedin.com" in raw_link:
-                        category_tag = "Corporate/ELT" if "corporate" in snippet_lower else "Voice Acting"
+                        # Fixed path length filter: allows /find_jobs (2 parts) while blocking root domains
+                        path_parts = [p for p in raw_link.replace("https://", "").replace("http://", "").split("/") if p]
+                        if len(path_parts) < 2:
+                            continue
+                        
+                        snippet_lower = snippet.lower()
+                        if not any(k in snippet_lower for k in ["voice", "actor", "audition", "casting", "narrator", "vo", "recording"]):
+                            continue
 
-                    is_paid = any(w in snippet_lower for w in pay_keywords)
+                        category_tag = "Voice Acting"
+                        if "audiodrama" in raw_link or "recordthis" in raw_link:
+                            category_tag = "Audiobooks"
+                        elif "linkedin.com" in raw_link:
+                            category_tag = "Corporate/ELT" if "corporate" in snippet_lower else "Voice Acting"
 
-                    opportunities.append({
-                        "title": snippet[:100] + "...",
-                        "company": label,
-                        "source": label,
-                        "category": category_tag,
-                        "posted_date": datetime.now().strftime("%Y-%m-%d"),
-                        "apply_url": raw_link,
-                        "pay_type": "Paid" if is_paid else "Unpaid Opportunity",
-                        "rate_budget": "Paid Role" if is_paid else "Open Rate / Community Call",
-                        "job_desc": f"{snippet}\n\n[REQ_METADATA|Sex:Any|Age:25-45|Accents:RP, General British|Style:Warm, Articulate]"
-                    })
-                    
+                        is_paid = any(w in snippet_lower for w in pay_keywords)
+
+                        opportunities.append({
+                            "title": snippet[:100] + "...",
+                            "company": label,
+                            "source": label,
+                            "category": category_tag,
+                            "posted_date": datetime.now().strftime("%Y-%m-%d"),
+                            "apply_url": raw_link,
+                            "pay_type": "Paid" if is_paid else "Unpaid Opportunity",
+                            "rate_budget": "Paid Role" if is_paid else "Open Rate / Community Call",
+                            "job_desc": f"{snippet}\n\n[REQ_METADATA|Sex:Any|Age:25-45|Accents:RP, General British|Style:Warm, Articulate]"
+                        })
+                        
         except Exception as e:
             logs.append(f"{label}: {str(e)}")
 
@@ -338,7 +340,7 @@ def run_all_scrapers():
     logs = []
     results = []
     
-    # Run direct DOM scrubbers and targeted search queries together
+    # Run direct DOM scrubbers and DuckDuckGo search queries together
     results.extend(scrape_twine_direct(logs))
     results.extend(scrape_casting_networks_direct(logs))
     results.extend(scrape_open_web_search(logs))

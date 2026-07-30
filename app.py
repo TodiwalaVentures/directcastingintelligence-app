@@ -160,14 +160,12 @@ def sanitize_url(url: str) -> str:
 # -----------------------------------------------------------------------------
 # 4. DYNAMIC LIVE WEB SCRAPER ENGINE
 # -----------------------------------------------------------------------------
-SCRAPER_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0.0.0 Safari/537.36",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Accept-Language": "en-US,en;q=0.5",
-}
+# -----------------------------------------------------------------------------
+# 4. DYNAMIC LIVE WEB SCRAPER ENGINE
+# -----------------------------------------------------------------------------
 
-def scrape_reddit_rss(logs):
-    """Scrapes community subreddits via RSS feeds with strict rate-limit pacing."""
+def scrape_reddit_json(logs):
+    """Scrapes subreddits via JSON to bypass XML crashes and RSS 429 blocks."""
     subreddits = [
         "recordthis", "VoiceActing", "voiceover", "INAT", 
         "AudioDrama", "acting", "gamedev", "LetsPlay"
@@ -179,44 +177,44 @@ def scrape_reddit_rss(logs):
         "seeking narrator", "vo casting", "voiceover", "audition"
     ]
     
+    # Unique User-Agent required by Reddit API guidelines to prevent 429 blocks
     reddit_headers = {
-        "User-Agent": "DCI-Opportunity-Scraper/1.0 (RSS Feed Reader)",
-        "Accept": "application/rss+xml, application/xml"
+        "User-Agent": "python:dci.casting.app:v2.0 (by /u/HomerT)"
     }
     
     for sub in subreddits:
         source_label = f"Reddit /r/{sub}"
-        url = f"https://www.reddit.com/r/{sub}/new/.rss"
+        # Fetching raw JSON data instead of RSS XML
+        url = f"https://www.reddit.com/r/{sub}/new.json?limit=15"
         try:
-            time.sleep(2.5)
+            time.sleep(1.5)
             res = requests.get(url, headers=reddit_headers, timeout=10)
             if res.status_code != 200:
                 logs.append(f"{source_label}: HTTP Error {res.status_code}")
                 continue
             
-            soup = BeautifulSoup(res.content, "xml")
-            for entry in soup.find_all("entry"):
-                title_elem = entry.find("title")
-                link_elem = entry.find("link")
-                updated_elem = entry.find("updated")
-                if title_elem:
-                    title = title_elem.get_text().strip()
-                    if any(kw in title.lower() for kw in keywords):
-                        link = link_elem["href"] if link_elem and "href" in link_elem.attrs else f"https://reddit.com/r/{sub}"
-                        date_str = updated_elem.get_text()[:10] if updated_elem else "Recent"
-                        pay_type = "Paid" if any(w in title.lower() for w in ["paid", "$", "£", "hiring"]) else "Unpaid Opportunity"
-                        
-                        opportunities.append({
-                            "title": title[:100],
-                            "company": f"Reddit /r/{sub} Poster",
-                            "source": source_label,
-                            "category": "Audiobooks" if sub == "AudioDrama" else ("Screen/Film/TV" if sub in ["acting", "gamedev"] else "Voice Acting"),
-                            "posted_date": date_str,
-                            "apply_url": link,
-                            "pay_type": pay_type,
-                            "rate_budget": "Paid Role" if pay_type == "Paid" else "Community Call",
-                            "job_desc": f"{title}\n\n[REQ_METADATA|Sex:Any|Age:20-50|Accents:Any|Style:Conversational]"
-                        })
+            data = res.json()
+            posts = data.get("data", {}).get("children", [])
+            
+            for post in posts:
+                post_data = post.get("data", {})
+                title = post_data.get("title", "")
+                
+                if any(kw in title.lower() for kw in keywords):
+                    link = "https://reddit.com" + post_data.get("permalink", f"/r/{sub}")
+                    pay_type = "Paid" if any(w in title.lower() for w in ["paid", "$", "£", "hiring"]) else "Unpaid Opportunity"
+                    
+                    opportunities.append({
+                        "title": title[:100] + "...",
+                        "company": f"Reddit /r/{sub} Poster",
+                        "source": source_label,
+                        "category": "Audiobooks" if sub == "AudioDrama" else ("Screen/Film/TV" if sub in ["acting", "gamedev"] else "Voice Acting"),
+                        "posted_date": datetime.now().strftime("%Y-%m-%d"),
+                        "apply_url": link,
+                        "pay_type": pay_type,
+                        "rate_budget": "Paid Role" if pay_type == "Paid" else "Community Call",
+                        "job_desc": f"{title}\n\n[REQ_METADATA|Sex:Any|Age:20-50|Accents:Any|Style:Conversational]"
+                    })
         except Exception as e:
             logs.append(f"{source_label}: {str(e)}")
             
@@ -225,79 +223,75 @@ def scrape_reddit_rss(logs):
 
 def scrape_open_web_search(logs):
     """
-    Scrapes open web networks, social handles, and freelance job boards.
-    Includes Casting Call Club via search indexing to bypass JavaScript blocks.
+    Scrapes web networks and freelance boards using DuckDuckGo Lite POST requests 
+    to successfully bypass HTTP 202 JavaScript Bot Challenges.
     """
     opportunities = []
     
     queries = [
         (
-            "Social Networks & Communities (LinkedIn/Bluesky/Twitter/Reddit)",
-            '(site:linkedin.com/posts OR site:bsky.app/profile OR site:x.com OR site:twitter.com OR site:reddit.com) '
-            '("voice artist needed" OR "voice actor needed" OR "VO casting" OR "seeking voice talent" OR "VACastingCallRT")'
+            "Social Networks & Communities",
+            '(site:linkedin.com/posts OR site:x.com OR site:twitter.com OR site:bsky.app/profile) ("voice artist needed" OR "voice actor needed" OR "VO casting" OR "VACastingCallRT")'
         ),
         (
-            "Casting & Creative Boards (Casting Call Club/Twine/Behance)",
-            '(site:castingcall.club OR site:twine.net/jobs OR site:behance.net/joblist) '
-            '("voice actor" OR "voice over" OR "casting call" OR "audition")'
+            "Casting & Creative Boards",
+            '(site:castingcall.club OR site:twine.net/jobs OR site:behance.net/joblist) ("voice actor" OR "voice over" OR "casting call" OR "audition")'
         ),
         (
-            "Freelance Job Portals (Upwork/PeoplePerHour/Freelancer/Guru/Fiverr)",
-            '(site:upwork.com/freelance-jobs OR site:peopleperhour.com OR site:freelancer.com OR site:guru.com OR site:fiverr.com) '
-            '("voice over" OR "voiceover" OR "voice actor" OR "acx")'
+            "Freelance Job Portals",
+            '(site:upwork.com/freelance-jobs OR site:peopleperhour.com OR site:freelancer.com OR site:fiverr.com) ("voice over" OR "voice actor")'
         )
     ]
 
+    ddg_lite_url = "https://lite.duckduckgo.com/lite/"
     ddg_headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.5",
-        "Referer": "https://duckduckgo.com/",
-        "Upgrade-Insecure-Requests": "1"
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Origin": "https://lite.duckduckgo.com",
+        "Referer": "https://lite.duckduckgo.com/"
     }
 
     for label, search_query in queries:
-        url = f"https://html.duckduckgo.com/html/?q={urllib.parse.quote(search_query)}"
         try:
-            time.sleep(3.0)
-            res = requests.get(url, headers=ddg_headers, timeout=10)
+            time.sleep(2.0)
+            payload = {"q": search_query, "kl": "wt-wt"}
+            # Sending a POST request to DDG Lite bypasses Streamlit IP blocking
+            res = requests.post(ddg_lite_url, headers=ddg_headers, data=payload, timeout=15)
+            
             if res.status_code != 200:
                 logs.append(f"{label}: HTTP Error {res.status_code}")
                 continue
                 
             soup = BeautifulSoup(res.text, "html.parser")
-            results = soup.find_all("div", class_="result__body")
-
-            for result in results:
-                title_elem = result.find("a", class_="result__url")
-                snippet_elem = result.find("a", class_="result__snippet")
-
-                if title_elem and snippet_elem:
-                    snippet = snippet_elem.get_text().strip()
-                    raw_link = title_elem["href"]
-
-                    if "uddg=" in raw_link:
-                        raw_link = urllib.parse.unquote(raw_link.split("uddg=")[1].split("&")[0])
-
+            
+            for a_tag in soup.find_all("a"):
+                href = a_tag.get("href", "")
+                snippet = a_tag.get_text(strip=True)
+                
+                # Filter for valid external links with descriptive text
+                if href.startswith("http") and "duckduckgo" not in href and len(snippet) > 15:
+                    
                     category_tag = "Voice Acting"
-                    if "linkedin" in raw_link or "behance" in raw_link:
+                    if "linkedin" in href or "behance" in href:
                         category_tag = "Commercial Print/Modeling"
-                    elif any(domain in raw_link for domain in ["upwork", "peopleperhour", "guru", "fiverr"]):
+                    elif any(domain in href for domain in ["upwork", "peopleperhour", "freelancer", "guru"]):
                         category_tag = "Corporate/ELT"
-                    elif "x.com" in raw_link or "twitter.com" in raw_link:
+                    elif "x.com" in href or "twitter.com" in href:
                         category_tag = "Animation"
 
                     opportunities.append({
-                        "title": snippet[:120] + "...",
-                        "company": label.split(" (")[0],
-                        "source": label.split(" (")[0],
+                        "title": snippet[:100] + "...",
+                        "company": label,
+                        "source": label,
                         "category": category_tag,
                         "posted_date": datetime.now().strftime("%Y-%m-%d"),
-                        "apply_url": raw_link,
+                        "apply_url": href,
                         "pay_type": "Paid" if any(w in snippet.lower() for w in ["paid", "$", "£", "fee", "budget"]) else "Unpaid Opportunity",
                         "rate_budget": "Open Rate / See Listing",
-                        "job_desc": f"{snippet}\n\n[REQ_METADATA|Sex:Any|Age:25-45|Accents:RP, General British|Style:Warm, Articulate]"
+                        "job_desc": f"Found via open casting search: {snippet}\n\n[REQ_METADATA|Sex:Any|Age:25-45|Accents:RP, General British|Style:Warm, Articulate]"
                     })
+                    
         except Exception as e:
             logs.append(f"{label}: {str(e)}")
 
@@ -308,7 +302,8 @@ def run_all_scrapers():
     logs = []
     results = []
     
-    results.extend(scrape_reddit_rss(logs))
+    # Fetching from the newly updated functions
+    results.extend(scrape_reddit_json(logs))
     results.extend(scrape_open_web_search(logs))
     
     seen_links = set()

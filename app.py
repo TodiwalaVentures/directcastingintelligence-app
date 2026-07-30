@@ -155,184 +155,156 @@ def sanitize_url(url: str) -> str:
     return "#"
 
 # -----------------------------------------------------------------------------
-# 4. DYNAMIC LIVE WEB SCRAPER ENGINE
+# 4. DYNAMIC LIVE WEB SCRAPER ENGINE (FEED-FIRST ARCHITECTURE)
 # -----------------------------------------------------------------------------
 SCRAPER_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Accept-Language": "en-US,en;q=0.5",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
 }
 
-def scrape_twine_direct(logs):
-    """Directly scrapes active listings from Twine's voiceover artist board."""
+def scrape_reddit_json(logs):
+    """Scrapes Reddit voice actor boards using native JSON to bypass RSS formatting crashes."""
+    subreddits = ["VoiceActing", "RecordThis", "audiodrama"]
     opportunities = []
-    url = "https://www.twine.net/jobs/voiceover-artists"
-    try:
-        res = requests.get(url, headers=SCRAPER_HEADERS, timeout=12)
-        if res.status_code != 200:
-            logs.append(f"Twine Direct: HTTP Error {res.status_code}")
-            return opportunities
-            
-        soup = BeautifulSoup(res.text, "html.parser")
-        
-        for a_tag in soup.find_all("a", href=True):
-            href = a_tag.get("href", "")
-            if "/jobs/" in href and len(href) > 10:
-                full_url = href if href.startswith("http") else f"https://www.twine.net{href}"
-                snippet = a_tag.get_text(strip=True)
+    keywords = ["casting", "hiring", "paid", "va needed", "voice artist", "voice actor", "looking for voice", "audition"]
+    
+    # Custom User-Agent required by Reddit API guidelines to prevent IP blocks
+    reddit_headers = {"User-Agent": "python:dci.casting.hub:v3.0 (by /u/HomerT)"}
+    
+    for sub in subreddits:
+        source_label = f"Reddit /r/{sub}"
+        url = f"https://www.reddit.com/r/{sub}/new.json?limit=20"
+        try:
+            time.sleep(1.5)
+            res = requests.get(url, headers=reddit_headers, timeout=10)
+            if res.status_code != 200:
+                logs.append(f"{source_label}: HTTP Error {res.status_code}")
+                continue
                 
-                if len(snippet) > 25 and any(w in snippet.lower() for w in ["voice", "audio", "artist", "narrator", "vo", "acting"]):
-                    pay_keywords = ["paid", "$", "£", "€", "fee", "budget", "rate", "compensation", "stipend"]
-                    is_paid = any(w in snippet.lower() for w in pay_keywords)
+            data = res.json()
+            posts = data.get("data", {}).get("children", [])
+            
+            for post in posts:
+                post_data = post.get("data", {})
+                title = post_data.get("title", "")
+                
+                if any(kw in title.lower() for kw in keywords):
+                    link = "https://reddit.com" + post_data.get("permalink", f"/r/{sub}")
+                    pay_type = "Paid" if any(w in title.lower() for w in ["paid", "$", "£", "hiring"]) else "Unpaid Opportunity"
                     
                     opportunities.append({
-                        "title": snippet[:100] + "...",
-                        "company": "Twine Direct Board",
-                        "source": "Twine Direct",
-                        "category": "Voice Acting",
+                        "title": title[:100] + "...",
+                        "company": f"Reddit /r/{sub} Poster",
+                        "source": source_label,
+                        "category": "Audiobooks" if sub == "audiodrama" else "Voice Acting",
                         "posted_date": datetime.now().strftime("%Y-%m-%d"),
-                        "apply_url": full_url,
-                        "pay_type": "Paid" if is_paid else "Unpaid Opportunity",
-                        "rate_budget": "Paid Project" if is_paid else "Open Rate / Negotiable",
-                        "job_desc": f"{snippet}\n\n[REQ_METADATA|Sex:Any|Age:25-45|Accents:Any|Style:Professional]"
+                        "apply_url": link,
+                        "pay_type": pay_type,
+                        "rate_budget": "Paid Role" if pay_type == "Paid" else "Community Call",
+                        "job_desc": f"{title}\n\n[REQ_METADATA|Sex:Any|Age:20-50|Accents:Any|Style:Conversational]"
                     })
+        except Exception as e:
+            logs.append(f"{source_label}: {str(e)}")
+            
+    return opportunities
+
+
+def scrape_upwork_rss(logs):
+    """Direct integration with Upwork's native RSS feed for high-value B2B/Corporate Voiceover contracts."""
+    opportunities = []
+    url = "https://www.upwork.com/ab/feed/jobs/rss?q=%22voice+over%22"
+    
+    try:
+        res = requests.get(url, headers=SCRAPER_HEADERS, timeout=10)
+        if res.status_code != 200:
+            logs.append(f"Upwork RSS: HTTP Error {res.status_code}")
+            return opportunities
+            
+        # html.parser handles standard RSS XML efficiently without needing external lxml libraries
+        soup = BeautifulSoup(res.content, "html.parser")
+        
+        for item in soup.find_all("item"):
+            title = item.find("title").get_text(strip=True) if item.find("title") else "Upwork VO Contract"
+            link = item.find("link").get_text(strip=True) if item.find("link") else ""
+            desc = item.find("description").get_text(strip=True) if item.find("description") else ""
+            
+            opportunities.append({
+                "title": title[:100] + "...",
+                "company": "Upwork Client",
+                "source": "Upwork",
+                "category": "Corporate/ELT",
+                "posted_date": datetime.now().strftime("%Y-%m-%d"),
+                "apply_url": link,
+                "pay_type": "Paid",
+                "rate_budget": "Paid Contract (See Listing)",
+                "job_desc": f"Remote Voiceover Contract.\n\n{desc[:150]}...\n\n[REQ_METADATA|Sex:Any|Age:25-45|Accents:Any|Style:Professional]"
+            })
     except Exception as e:
-        logs.append(f"Twine Direct: {str(e)}")
+        logs.append(f"Upwork RSS: {str(e)}")
         
     return opportunities
 
 
-def scrape_casting_networks_direct(logs):
-    """Directly scrapes active voice-over auditions from Casting Networks."""
-    opportunities = []
-    url = "https://www.castingnetworks.com/voice-over-auditions/"
-    try:
-        res = requests.get(url, headers=SCRAPER_HEADERS, timeout=12)
-        if res.status_code != 200:
-            logs.append(f"Casting Networks Direct: HTTP Error {res.status_code}")
-            return opportunities
-            
-        soup = BeautifulSoup(res.text, "html.parser")
-        
-        for a_tag in soup.find_all("a", href=True):
-            href = a_tag.get("href", "")
-            if any(p in href for p in ["/role/", "/audition/", "/job/"]) or "castingnetworks.com" in href:
-                full_url = href if href.startswith("http") else f"https://www.castingnetworks.com{href}"
-                snippet = a_tag.get_text(strip=True)
-                
-                if len(snippet) > 20 and not any(skip in full_url for skip in ["/profile/", "/talent/", "/login", "/pricing"]):
-                    pay_keywords = ["paid", "$", "£", "€", "fee", "budget", "rate", "compensation"]
-                    is_paid = any(w in snippet.lower() for w in pay_keywords)
-                    
-                    opportunities.append({
-                        "title": snippet[:100] + "...",
-                        "company": "Casting Networks Direct",
-                        "source": "Casting Networks",
-                        "category": "Voice Acting",
-                        "posted_date": datetime.now().strftime("%Y-%m-%d"),
-                        "apply_url": full_url,
-                        "pay_type": "Paid" if is_paid else "Unpaid Opportunity",
-                        "rate_budget": "Paid Casting" if is_paid else "See Listing",
-                        "job_desc": f"{snippet}\n\n[REQ_METADATA|Sex:Any|Age:25-45|Accents:Any|Style:Commercial/Narration]"
-                    })
-    except Exception as e:
-        logs.append(f"Casting Networks Direct: {str(e)}")
-        
-    return opportunities
-
-
-def scrape_open_web_search(logs):
+def scrape_bing_rss_search(logs):
     """
-    Precision search scraper using DuckDuckGo HTML targeting LinkedIn, 
-    Casting Call Club (/find_jobs), and Reddit voice casting communities.
+    Bypasses JavaScript rendering blocks and DDG CAPTCHAs by exploiting Bing's native XML search feeds.
+    Pulls pre-rendered indexed data from SPAs like Twine, LinkedIn, and Casting Call Club.
     """
     opportunities = []
     
+    # Precision site-search queries
     queries = [
-        (
-            "LinkedIn Jobs (Contract/Remote)",
-            'site:linkedin.com/jobs ("voice over" OR "voice actor" remote OR "voice talent" freelance OR "VO artist" hiring OR "narration" voice actor contract)'
-        ),
-        (
-            "LinkedIn Posts (Casting Calls)",
-            'site:linkedin.com/posts ("voice over" OR "voice actor" OR "VO artist" hiring OR "looking for a voice actor" OR "seeking voice talent")'
-        ),
-        (
-            "Casting Call Club Jobs",
-            'site:castingcall.club/find_jobs ("voice actor" OR "audition" OR "character voice" OR "paid voice" OR "actor")'
-        ),
-        (
-            "Reddit Voice Casting Boards",
-            '(site:reddit.com/r/VoiceActing OR site:reddit.com/r/RecordThis OR site:reddit.com/r/audiodrama) ("hiring" OR "paid" OR "casting call" OR "voice actor needed")'
-        )
+        ("Casting Call Club", 'site:castingcall.club/find_jobs "voice actor" OR "audition" OR "character"'),
+        ("Twine Jobs", 'site:twine.net/jobs "voiceover" OR "voice actor" OR "voice artist"'),
+        ("Casting Networks", 'site:castingnetworks.com/voice-over-auditions "voice" OR "audition"'),
+        ("LinkedIn Remote", 'site:linkedin.com/jobs "voice actor" remote OR freelance')
     ]
-
+    
     pay_keywords = ["paid", "$", "£", "€", "fee", "budget", "rate", "compensation", "stipend", "hiring", "salary"]
-
-    for label, search_query in queries:
-        url = f"https://html.duckduckgo.com/html/?q={urllib.parse.quote(search_query)}"
+    
+    for label, query in queries:
+        # Appending &format=rss returns XML data instead of HTML, completely avoiding bot walls
+        url = f"https://www.bing.com/search?q={urllib.parse.quote(query)}&format=rss"
         try:
-            time.sleep(2.5)
+            time.sleep(2.0)
             res = requests.get(url, headers=SCRAPER_HEADERS, timeout=12)
-            
             if res.status_code != 200:
-                logs.append(f"{label}: HTTP Error {res.status_code}")
+                logs.append(f"{label} (Bing RSS): HTTP Error {res.status_code}")
                 continue
                 
-            soup = BeautifulSoup(res.text, "html.parser")
-            results = soup.find_all("div", class_="result__body")
-
-            for result in results:
-                title_elem = result.find("a", class_="result__url")
-                snippet_elem = result.find("a", class_="result__snippet")
-
-                if title_elem and snippet_elem:
-                    snippet = snippet_elem.get_text().strip()
-                    raw_link = title_elem["href"]
-
-                    if "uddg=" in raw_link:
-                        try:
-                            raw_link = urllib.parse.unquote(raw_link.split("uddg=")[1].split("&")[0])
-                        except Exception:
-                            pass
+            soup = BeautifulSoup(res.content, "html.parser")
+            
+            for item in soup.find_all("item"):
+                title = item.find("title").get_text(strip=True) if item.find("title") else ""
+                link = item.find("link").get_text(strip=True) if item.find("link") else ""
+                desc = item.find("description").get_text(strip=True) if item.find("description") else ""
+                
+                # Filter out pure navigation/login links that search engines accidentally index
+                if any(x in link.lower() for x in ["/login", "/signup", "/privacy", "/terms", "/pricing"]):
+                    continue
+                
+                if len(title) > 10:
+                    category_tag = "Voice Acting"
+                    if "linkedin" in link:
+                        category_tag = "Corporate/ELT"
                     
-                    if raw_link.startswith("http") and "duckduckgo" not in raw_link:
-                        skip_patterns = ["/talent/public-profile/", "/profile/", "/user/", "/forums/", "/pricing", "/faq"]
-                        if any(pattern in raw_link for pattern in skip_patterns):
-                            continue
-
-                        # Fixed path length filter: allows /find_jobs (2 parts) while blocking root domains
-                        path_parts = [p for p in raw_link.replace("https://", "").replace("http://", "").split("/") if p]
-                        if len(path_parts) < 2:
-                            continue
-                        
-                        snippet_lower = snippet.lower()
-                        if not any(k in snippet_lower for k in ["voice", "actor", "audition", "casting", "narrator", "vo", "recording"]):
-                            continue
-
-                        category_tag = "Voice Acting"
-                        if "audiodrama" in raw_link or "recordthis" in raw_link:
-                            category_tag = "Audiobooks"
-                        elif "linkedin.com" in raw_link:
-                            category_tag = "Corporate/ELT" if "corporate" in snippet_lower else "Voice Acting"
-
-                        is_paid = any(w in snippet_lower for w in pay_keywords)
-
-                        opportunities.append({
-                            "title": snippet[:100] + "...",
-                            "company": label,
-                            "source": label,
-                            "category": category_tag,
-                            "posted_date": datetime.now().strftime("%Y-%m-%d"),
-                            "apply_url": raw_link,
-                            "pay_type": "Paid" if is_paid else "Unpaid Opportunity",
-                            "rate_budget": "Paid Role" if is_paid else "Open Rate / Community Call",
-                            "job_desc": f"{snippet}\n\n[REQ_METADATA|Sex:Any|Age:25-45|Accents:RP, General British|Style:Warm, Articulate]"
-                        })
-                        
+                    is_paid = any(w in title.lower() or w in desc.lower() for w in pay_keywords)
+                    
+                    opportunities.append({
+                        "title": title[:100] + "...",
+                        "company": label,
+                        "source": "Search Index",
+                        "category": category_tag,
+                        "posted_date": datetime.now().strftime("%Y-%m-%d"),
+                        "apply_url": link,
+                        "pay_type": "Paid" if is_paid else "Unpaid Opportunity",
+                        "rate_budget": "Paid Role" if is_paid else "Open Rate / Community Call",
+                        "job_desc": f"{desc[:200]}...\n\n[REQ_METADATA|Sex:Any|Age:25-45|Accents:RP, General British|Style:Warm, Articulate]"
+                    })
+                    
         except Exception as e:
-            logs.append(f"{label}: {str(e)}")
-
+            logs.append(f"{label} (Bing RSS): {str(e)}")
+            
     return opportunities
 
 
@@ -340,17 +312,19 @@ def run_all_scrapers():
     logs = []
     results = []
     
-    # Run direct DOM scrubbers and DuckDuckGo search queries together
-    results.extend(scrape_twine_direct(logs))
-    results.extend(scrape_casting_networks_direct(logs))
-    results.extend(scrape_open_web_search(logs))
+    # Execute the Feed-First engine
+    results.extend(scrape_reddit_json(logs))
+    results.extend(scrape_upwork_rss(logs))
+    results.extend(scrape_bing_rss_search(logs))
     
+    # Deduplicate results based on URL to prevent feed overlap
     seen_links = set()
     deduped = []
     for r in results:
         if r["apply_url"] not in seen_links:
             seen_links.add(r["apply_url"])
             deduped.append(r)
+            
     return deduped, logs
 # -----------------------------------------------------------------------------
 # 5. AUTHENTICATION & ONBOARDING GATEKEEPER

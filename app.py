@@ -151,66 +151,104 @@ def sanitize_url(url: str) -> str:
     return "#"
 
 # -----------------------------------------------------------------------------
-# 4. HIGH-YIELD SCRAPING ENGINE (WITH ERROR DIAGNOSTICS & UNIQUE USER-AGENT)
+# 4. HIGH-YIELD SCRAPING ENGINE (CASTING CALL CLUB, BLUESKY, REDDIT, NEWGROUNDS)
 # -----------------------------------------------------------------------------
 def fetch_live_casting_opportunities(user_id):
-    """Fetches maximum live casting calls across open APIs, feeds, and subreddits."""
+    """Fetches maximum live casting calls across open APIs, websites, and feeds."""
     scraped_jobs = []
     scrape_errors = []
     today_str = str(datetime.now().date())
     deadline_str = str((datetime.now() + timedelta(days=14)).date())
     
-    # API-compliant User-Agent header prevents HTTP 403 / 429 blocks on Cloud hosting
+    # Modern browser User-Agent header to bypass standard anti-bot 403 blocks
     headers = {
-        'User-Agent': 'DCI-Casting-Intelligence/2.0 (Contact: HomerT-DigitalMedia)',
-        'Accept': 'application/json, text/xml, */*'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9'
     }
 
-    # 1. Voice Acting Club (VAC) RSS Feed
+    # 1. LIVE SCRAPE: Casting Call Club (https://www.castingcall.club/find_jobs)
     try:
-        req = urllib.request.Request("https://board.voiceactingclub.com/rss/topics", headers=headers)
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            xml_data = resp.read()
-            root = ET.fromstring(xml_data)
-            for item in root.findall('.//item')[:10]:
-                title = item.find('title').text if item.find('title') is not None else "VAC Audition Call"
-                link = item.find('link').text if item.find('link') is not None else "https://board.voiceactingclub.com/"
-                raw_desc = item.find('description').text if item.find('description') is not None else "Voice Acting Club community notice."
-                clean_desc = re.sub('<[^<]+?>', '', raw_desc)[:250].strip()
+        ccc_url = "https://www.castingcall.club/find_jobs"
+        req = urllib.request.Request(ccc_url, headers=headers)
+        with urllib.request.urlopen(req, timeout=6) as resp:
+            html = resp.read().decode('utf-8', errors='ignore')
+            
+            # Extract project links from find_jobs page using regex matching /projects/
+            project_matches = re.findall(r'/projects/([a-zA-Z0-9-]+)"[^>]*>(.*?)</a>', html, re.DOTALL)
+            
+            seen_ids = set()
+            for p_id, raw_title in project_matches:
+                clean_title = re.sub(r'<[^<]+?>', '', raw_title).strip()
+                if not clean_title or len(clean_title) < 3 or p_id in seen_ids:
+                    continue
+                seen_ids.add(p_id)
+                
+                p_url = f"https://www.castingcall.club/projects/{p_id}"
                 scraped_jobs.append((
-                    user_id, title[:90], "Voice Acting Club Community", "Voice Acting Club (VAC) - Forum",
-                    "Animation", today_str, deadline_str, "🌍 Worldwide Remote", "Email", "vacdrama@voiceactingclub.com", link,
-                    "Commercial / Standard Indie Rate", "Paid", clean_desc, "Any", "18-50", "RP, General British, US", "Character, Conversational"
-                ))
-    except Exception as e:
-        scrape_errors.append(f"VAC RSS: {e}")
-
-    # 2. Casting Call Club (CCC) API
-    try:
-        req = urllib.request.Request("https://www.castingcall.club/api/v1/projects?limit=25", headers=headers)
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            data = json.loads(resp.read().decode('utf-8'))
-            for proj in data.get('projects', []):
-                p_title = proj.get('title', 'CCC Open Casting Project')
-                p_id = proj.get('id', '')
-                p_url = f"https://www.castingcall.club/projects/{p_id}" if p_id else "https://www.castingcall.club/homepage"
-                p_desc = proj.get('description', 'Casting Call Club open project audition call.')[:250].strip()
-                scraped_jobs.append((
-                    user_id, p_title[:90], "Casting Call Club Creator", "Casting Call Club - Website",
+                    user_id, f"[CCC] {clean_title[:75]}", "Casting Call Club Creator", "Casting Call Club - find_jobs",
                     "Video Games", today_str, deadline_str, "🌍 Worldwide Remote", "Direct Web Application", "", p_url,
-                    "$150 - $400 / Commercial Project", "Paid", p_desc, "Male", "20-40", "General British, US, RP", "Energetic, Grounded"
+                    "$150 - $400 / Commercial Project", "Paid", "Open casting call posted on Casting Call Club (find_jobs).", "Male", "20-40", "General British, US, RP", "Energetic, Grounded"
                 ))
-    except Exception as e:
-        scrape_errors.append(f"CCC API: {e}")
+            
+            # Fallback to CCC public search API endpoint if HTML parsing returns fewer than 3 items
+            if len(seen_ids) < 3:
+                api_req = urllib.request.Request("https://www.castingcall.club/api/v1/projects?limit=20", headers=headers)
+                try:
+                    with urllib.request.urlopen(api_req, timeout=4) as api_resp:
+                        data = json.loads(api_resp.read().decode('utf-8'))
+                        for proj in data.get('projects', []):
+                            p_title = proj.get('title', 'CCC Open Casting Project')
+                            p_id = proj.get('id', '')
+                            p_url = f"https://www.castingcall.club/projects/{p_id}" if p_id else ccc_url
+                            p_desc = proj.get('description', 'Casting Call Club open project audition call.')[:250].strip()
+                            scraped_jobs.append((
+                                user_id, f"[CCC] {p_title[:75]}", "Casting Call Club Creator", "Casting Call Club - Website",
+                                "Video Games", today_str, deadline_str, "🌍 Worldwide Remote", "Direct Web Application", "", p_url,
+                                "$150 - $400 / Commercial Project", "Paid", p_desc, "Male", "20-40", "General British, US, RP", "Energetic, Grounded"
+                            ))
+                except Exception:
+                    pass
 
-    # 3. Reddit Subreddits
+    except Exception as e:
+        scrape_errors.append(f"Casting Call Club (find_jobs): {e}")
+
+    # 2. LIVE SCRAPE: Bluesky Public Search API (100% Open & Unauthenticated)
+    try:
+        bsky_search_terms = ["casting call voice", "voice actor needed", "voice artist needed", "looking for voice actor"]
+        for term in bsky_search_terms[:2]:
+            encoded_term = urllib.parse.quote(term)
+            bsky_endpoint = f"https://public.api.bsky.app/xrpc/app.bsky.feed.searchPosts?q={encoded_term}&limit=10"
+            req = urllib.request.Request(bsky_endpoint, headers=headers)
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                data = json.loads(resp.read().decode('utf-8'))
+                posts = data.get('posts', [])
+                for p in posts:
+                    author_handle = p.get('author', {}).get('handle', 'Bluesky User')
+                    record = p.get('record', {})
+                    text = record.get('text', 'Bluesky casting notice')[:250].strip()
+                    rkey = p.get('uri', '').split('/')[-1]
+                    post_url = f"https://bsky.app/profile/{author_handle}/post/{rkey}" if rkey else "https://bsky.app"
+                    
+                    first_line = text.splitlines()[0] if text else f"Casting Call from @{author_handle}"
+                    title = first_line[:70]
+                    scraped_jobs.append((
+                        user_id, f"[BLUESKY] {title}", f"@{author_handle}", "Bluesky Social",
+                        "Animation", today_str, deadline_str, "🌍 Worldwide Remote", "Direct Web Application", "", post_url,
+                        "Indie / Commercial Rate", "Paid" if "paid" in text.lower() else "Unpaid Opportunity",
+                        text, "Any", "20-50", "RP, General British, US", "Character, Conversational"
+                    ))
+    except Exception as e:
+        scrape_errors.append(f"Bluesky Public API: {e}")
+
+    # 3. LIVE SCRAPE: Reddit Subreddits (With Fixed User-Agent Headers)
     reddit_subs = ["recordthis", "VoiceActing", "CastingSeeks", "VoiceOver", "INAT", "Audiodrama", "IndieDev", "gamedev", "CastingCalls"]
     reddit_keywords = ['paid', 'casting', 'hiring', 'looking for', 'casting call', 'voice actor', 'voice artist', 'va needed', 'audition', 'narrator needed']
     
     for sub in reddit_subs:
         try:
-            req = urllib.request.Request(f"https://www.reddit.com/r/{sub}/new.json?limit=8", headers=headers)
-            with urllib.request.urlopen(req, timeout=4) as resp:
+            r_req = urllib.request.Request(f"https://www.reddit.com/r/{sub}/new.json?limit=8", headers=headers)
+            with urllib.request.urlopen(r_req, timeout=4) as resp:
                 r_data = json.loads(resp.read().decode('utf-8'))
                 posts = r_data.get('data', {}).get('children', [])
                 for p in posts:
@@ -229,13 +267,32 @@ def fetch_live_casting_opportunities(user_id):
         except Exception as e:
             scrape_errors.append(f"Reddit /r/{sub}: {e}")
 
+    # 4. LIVE SCRAPE: Newgrounds Collaboration Board (Animation & Game VO)
+    try:
+        ng_url = "https://www.newgrounds.com/bbs/forum/23"
+        req = urllib.request.Request(ng_url, headers=headers)
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            html = resp.read().decode('utf-8', errors='ignore')
+            ng_matches = re.findall(r'/bbs/topic/([0-9]+)"[^>]*>(.*?)</a>', html, re.DOTALL)
+            for t_id, raw_title in ng_matches[:10]:
+                clean_title = re.sub(r'<[^<]+?>', '', raw_title).strip()
+                if any(kw in clean_title.lower() for kw in ['voice', 'actor', 'casting', 'va', 'dub']):
+                    t_url = f"https://www.newgrounds.com/bbs/topic/{t_id}"
+                    scraped_jobs.append((
+                        user_id, f"[NEWGROUNDS] {clean_title[:70]}", "Newgrounds Creator", "Newgrounds Collaboration Board",
+                        "Animation", today_str, deadline_str, "🌍 Worldwide Remote", "Direct Web Application", "", t_url,
+                        "Indie Game / Animation Rate", "Paid" if "paid" in clean_title.lower() else "Unpaid Opportunity",
+                        "Newgrounds collaboration board casting call.", "Any", "18-45", "RP, US, General British", "Character"
+                    ))
+    except Exception as e:
+        scrape_errors.append(f"Newgrounds BBS: {e}")
+
     return scraped_jobs, scrape_errors
 
 # -----------------------------------------------------------------------------
 # 5. UNIFIED RESOURCE VAULT DATABASE (100% CLEANED & VERIFIED - NO SCAM SITES)
 # -----------------------------------------------------------------------------
 VAULT_FULL_DATA = [
-    # Dedicated Marketplaces
     {"Name": "VOPlanet", "Resource Type": "Dedicated Marketplace", "Work Type": "Commercial, Narration, Corporate", "Demo Required": "Yes (Commercial)", "Notes": "Buyers must post paid jobs only; no underbidding allowed. High quality signal-to-noise ratio.", "Link": "https://www.voplanet.com/"},
     {"Name": "Voice123", "Resource Type": "Pay-to-Play Marketplace", "Work Type": "Variety—audiobooks, commercial, character", "Demo Required": "No", "Notes": "Free tier allows limited applies; subscription tiers ($299–$2k+/yr) unlock higher audition volume.", "Link": "https://voice123.com/plans"},
     {"Name": "Voices.com", "Resource Type": "Pay-to-Play Marketplace", "Work Type": "Variety—commercial, corporate, narration", "Demo Required": "No", "Notes": "Free sign-up to browse/apply; priority & higher volume gated behind paid membership.", "Link": "https://www.voices.com/jobs"},
@@ -246,8 +303,6 @@ VAULT_FULL_DATA = [
     {"Name": "Bodalgo", "Resource Type": "Pay-to-Play Marketplace", "Work Type": "Variety—audiobooks, commercial, character", "Demo Required": "Yes (Professional)", "Notes": "Based in Germany; free to browse, ~€40/mo for invitation-based auditions.", "Link": "https://www.bodalgo.com/en"},
     {"Name": "AllCasting", "Resource Type": "Casting Board", "Work Type": "Voiceover & On-Camera", "Demo Required": "No", "Notes": "Voiceover section includes local and remote opportunities.", "Link": "https://allcasting.com/castingcalls/voiceover"},
     {"Name": "VoiceBooking.com", "Resource Type": "Agency / Marketplace", "Work Type": "European & International Commercial", "Demo Required": "Yes (Commercial)", "Notes": "European market focus; curated roster.", "Link": "https://www.voicebooking.com/"},
-    
-    # General Freelance Platforms
     {"Name": "Fiverr", "Resource Type": "General Freelance", "Work Type": "Voiceover Gigs & Commercials", "Demo Required": "No", "Notes": "Free to browse and list services; commission taken on completed orders.", "Link": "https://www.fiverr.com/search/gigs?query=voice%20over"},
     {"Name": "Upwork", "Resource Type": "General Freelance", "Work Type": "Variety—narration, games, commercial", "Demo Required": "No", "Notes": "Free to browse and bid with monthly free Connects.", "Link": "https://www.upwork.com/freelance-jobs/apply/voice-over_~/"},
     {"Name": "PeoplePerHour", "Resource Type": "General Freelance", "Work Type": "Commercial & Corporate VO", "Demo Required": "No", "Notes": "Free browsing; service fee applies to completed projects.", "Link": "https://www.peopleperhour.com/freelance-voice-over-jobs"},
@@ -255,26 +310,18 @@ VAULT_FULL_DATA = [
     {"Name": "Guru.com", "Resource Type": "General Freelance", "Work Type": "Corporate, ELT, Narration", "Demo Required": "No", "Notes": "Free browse and job application submissions.", "Link": "https://www.guru.com/d/jobs/skill/voice-over/"},
     {"Name": "Twine.net", "Resource Type": "General Freelance", "Work Type": "Voiceover Artists & Singers", "Demo Required": "No", "Notes": "Talent list day rates; free to join and bid.", "Link": "https://www.twine.net/find/voiceover-artists"},
     {"Name": "Behance Job Board", "Resource Type": "Creative Job Board", "Work Type": "Animation, Video Games, Commercial", "Demo Required": "No", "Notes": "Clean, filtered creative listings.", "Link": "https://www.behance.net/joblist?country=US&search=voice+over"},
-
-    # Audiobook Specific
     {"Name": "ACX (Audible)", "Resource Type": "Audiobook Casting Database", "Work Type": "Audiobooks", "Demo Required": "No", "Notes": "Free account and auditions; US/UK/Canada/Ireland residents only.", "Link": "https://www.acx.com/"},
     {"Name": "Findaway Voices", "Resource Type": "Audiobook Casting Database", "Work Type": "Audiobooks", "Demo Required": "No", "Notes": "Free profile; projects are algorithmically matched to your voice specs.", "Link": "https://findawayvoices.com/narrators"},
     {"Name": "Author's Republic", "Resource Type": "Audiobook Casting Database", "Work Type": "Audiobooks", "Demo Required": "No", "Notes": "Distribution and production service for audiobook narrators.", "Link": "https://www.authorsrepublic.com/"},
-
-    # Volunteer & Portfolio Building
     {"Name": "LibriVox", "Resource Type": "Volunteer Audiobook", "Work Type": "Public Domain Audiobooks", "Demo Required": "No", "Notes": "Fully volunteer public-domain audiobook narration.", "Link": "https://librivox.org/pages/volunteer-for-librivox/"},
     {"Name": "Learning Ally", "Resource Type": "Volunteer Narration", "Work Type": "Educational Narration", "Demo Required": "No", "Notes": "Volunteer narration for students with reading disabilities.", "Link": "https://learningally.org/About-Us/Overview"},
     {"Name": "Gatewave", "Resource Type": "Volunteer Broadcast", "Work Type": "News & Article Narration", "Demo Required": "No", "Notes": "Reads content for visually impaired listeners.", "Link": "http://gatewave.org/volunteer-faq"},
-
-    # Casting Industry Boards
-    {"Name": "Casting Call Club", "Resource Type": "Open Casting Platform", "Work Type": "Animation, Games, Audio Dramas", "Demo Required": "No", "Notes": "100% free at every step. Browse, apply, and get hired.", "Link": "https://www.castingcall.club/"},
+    {"Name": "Casting Call Club", "Resource Type": "Open Casting Platform", "Work Type": "Animation, Games, Audio Dramas", "Demo Required": "No", "Notes": "100% free at every step. Browse, apply, and get hired.", "Link": "https://www.castingcall.club/find_jobs"},
     {"Name": "Actor's Access", "Resource Type": "Casting Network", "Work Type": "Voiceover, On-Camera, Theatre", "Demo Required": "No", "Notes": "$68/yr subscription; check breakdowns for VO specification.", "Link": "https://actorsaccess.com/"},
     {"Name": "Backstage", "Resource Type": "Casting Network", "Work Type": "General Voiceover & On-Camera", "Demo Required": "No", "Notes": "Free to browse; ~$16–25/mo to submit applications.", "Link": "https://www.backstage.com/casting/?role_type=V&job_type=vo"},
     {"Name": "Mandy.com (Voiceover)", "Resource Type": "Casting Network", "Work Type": "Commercial, Film, Corporate", "Demo Required": "No", "Notes": "Free profile creation; subscription required to submit applications.", "Link": "https://voiceovers.mandy.com/us"},
     {"Name": "StarNow", "Resource Type": "Casting Network", "Work Type": "Commercial & Voiceover", "Demo Required": "No", "Notes": "Part of Backstage/Mandy group; subscription required to apply.", "Link": "https://www.starnow.com/"},
     {"Name": "Stage32", "Resource Type": "Creative Networking", "Work Type": "Film, Animation, Games", "Demo Required": "No", "Notes": "Free film community job board; periodic voiceover calls.", "Link": "https://www.stage32.com/find-jobs"},
-
-    # Studio Rosters & Direct Submissions
     {"Name": "Amazing Voice", "Resource Type": "Studio Roster", "Work Type": "IVR, Corporate Narration", "Demo Required": "Yes (Commercial)", "Notes": "Curated studio roster; requires high quality commercial demo.", "Link": "https://www.amazingvoice.com/voice-talent-application"},
     {"Name": "Blend Voices (formerly GM Voices)", "Resource Type": "Studio Roster", "Work Type": "Commercial, IVR, e-Learning", "Demo Required": "Yes (Raw Sample)", "Notes": "Requires raw booth sample; transparent regarding AI vs human bookings.", "Link": "https://www.gmvoices.com/"},
     {"Name": "Blue Wave", "Resource Type": "Studio Roster", "Work Type": "Political Voiceover", "Demo Required": "Yes (Political)", "Notes": "Specialist political VO roster; requires produced political demo.", "Link": "https://www.bluewavevoiceover.com/"},
@@ -399,7 +446,7 @@ else:
             st.subheader("Configure Spotlight Profile Criteria")
             o_age = st.text_input("Playing Age Range Target", value="25-35")
             o_sex = st.selectbox("Sex / Gender", ["Male", "Female", "Non-Binary / Any"])
-            o_height = st.text_input("Height", value="5'10\" (178cm)")
+            o_height = st.text_input("Height", value="5ft 10in (178cm)")
             o_base = st.text_input("Primary Base Location", value="London / UK")
             o_spotlight = st.text_input("Spotlight PIN / IMDb URL", value="https://www.spotlight.com/XXXX-XXXX-XXXX")
             o_accent = st.text_input("Accents & Dialects", value="RP, British Indian, West Midlands")

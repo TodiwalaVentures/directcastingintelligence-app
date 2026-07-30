@@ -603,13 +603,13 @@ else:
 
             user_accents_list = [a.strip().lower() for a in u_accent.split(",")] if u_accent else []
 
-            # Fetch Jobs
-            conn = get_db_connection()
-            c = conn.cursor()
-            c.execute("""SELECT id, title, company, source, category, posted_date, deadline, region_location, app_method, contact_email, apply_url, rate_budget, pay_type, job_desc 
-                        FROM active_jobs WHERE user_id = %s ORDER BY id DESC""", (user_id,))
-            jobs = c.fetchall()
-            conn.close()
+           # Fetch Jobs
+conn = get_db_connection()
+c = conn.cursor()
+c.execute("""SELECT id, title, company, source, category, posted_date, deadline, region_location, app_method, contact_email, apply_url, rate_budget, pay_type, job_desc 
+            FROM active_jobs WHERE user_id = %s ORDER BY id DESC""", (user_id,))
+jobs = c.fetchall()
+conn.close()
 
             if not jobs:
                 st.info("No active opportunities loaded. Click '🔄 Scrub Open Casting Directories Now' above.")

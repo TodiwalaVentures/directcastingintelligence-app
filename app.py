@@ -13,7 +13,7 @@ import streamlit as st
 # -----------------------------------------------------------------------------
 APP_NAME = "DCI"
 APP_FULL_TITLE = "Direct Casting Intelligence"
-COMPANY_NAME = "Todiwala Ventures LTD - Digital Media Division"
+COMPANY_NAME = "Todiwala Ventures LTD"
 
 st.set_page_config(
     page_title=f"{APP_NAME} — {APP_FULL_TITLE}",
@@ -159,9 +159,9 @@ SCRAPER_HEADERS = {
 
 def scrape_voice_acting_club(logs):
     opportunities = []
-    urls = [("Paid", "https://voiceactingclub.com/category/paid/feed/"), ("Unpaid", "https://voiceactingclub.com/category/unpaid/feed/")]
+    urls = [("Paid", "https://castingcall.club/projects"), ("Unpaid", "https://castingcall.club/projects")]
     for category, url in urls:
-        source_label = f"Voice Acting Club ({category})"
+        source_label = f"Casting Call ({category})"
         try:
             res = requests.get(url, headers=SCRAPER_HEADERS, timeout=10)
             res.raise_for_status()
@@ -503,12 +503,12 @@ else:
             "🎯 Tab 1: Opportunities Feed", 
             "👥 Tab 2: Contact Hub", 
             "✉️ Tab 3: Outreach Studio", 
-            "📚 Tab 4: Agency Vault", 
+            "📚 Tab 4: Work Resources Vault", 
             "👤 Tab 5: Profile & GDPR"
         ])
 
         # ---------------------------------------------------------------------
-        # TAB 1: SCRAPED CASTING OPPORTUNITIES FEED
+        # TAB 1:  CASTING OPPORTUNITIES FEED
         # ---------------------------------------------------------------------
         with tabs[0]:
             st.header("🎯 Tab 1: Scraped Casting Opportunities Feed")
@@ -821,7 +821,7 @@ Spotlight Profile: {u_spotlight}{gdpr_footer}"""
                 st.markdown(f'<a href="{mailto_cmd}" target="_blank"><button style="background-color:#2563EB;color:white;border:none;padding:12px 24px;border-radius:6px;cursor:pointer;font-weight:bold;width:100%;">✉️ Launch Email in Mail App / Outlook</button></a>', unsafe_allow_html=True)
 
         # ---------------------------------------------------------------------
-        # TAB 4: UNIFIED RESOURCE & AGENCY INTAKE VAULT
+        # TAB 4: UNIFIED RESOURCE & INTAKE VAULT
         # ---------------------------------------------------------------------
         with tabs[3]:
             st.header("📚 Tab 4: Unified Resource & Agency Intake Vault")

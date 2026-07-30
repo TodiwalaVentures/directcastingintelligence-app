@@ -165,27 +165,31 @@ SCRAPER_HEADERS = {
 
 def scrape_open_web_search(logs):
     """
-    Scrapes Reddit communities, social networks, casting boards, 
-    and freelance portals via Yahoo Search to bypass cloud IP blocks and proxy errors.
+    Precision scraper targeting deep-link casting posts across high-intent 
+    platforms including Casting Call Club (/find_jobs), Twine, Reddit, and professional networks.
     """
     opportunities = []
     
     queries = [
         (
-            "Reddit Casting Communities",
-            '(site:reddit.com/r/VoiceActing OR site:reddit.com/r/voiceover OR site:reddit.com/r/RecordThis OR site:reddit.com/r/audiodrama) ("casting" OR "paid" OR "voice actor" OR "audition" OR "hiring")'
+            "Casting Call Club Jobs",
+            'site:castingcall.club/find_jobs ("voice actor" OR "audition" OR "character voice" OR "paid voice" OR "actor")'
         ),
         (
-            "Social Networks & Communities",
-            '(site:linkedin.com/posts OR site:x.com OR site:twitter.com OR site:bsky.app/profile) ("voice artist needed" OR "voice actor needed" OR "VO casting" OR "VACastingCallRT")'
+            "Twine Voice & Audio Jobs",
+            'site:twine.net/jobs ("voiceover" OR "voice actor" OR "actor" OR "audio engineer" OR "podcast" OR "voice artist")'
         ),
         (
-            "Casting & Creative Boards",
-            '(site:castingcall.club OR site:twine.net/jobs OR site:behance.net/joblist) ("voice actor" OR "voice over" OR "casting call" OR "audition")'
+            "Reddit Voice Casting Boards",
+            '(site:reddit.com/r/VoiceActing OR site:reddit.com/r/RecordThis OR site:reddit.com/r/audiodrama) ("hiring" OR "paid" OR "casting call" OR "voice actor needed")'
         ),
         (
-            "Freelance Job Portals",
-            '(site:upwork.com/freelance-jobs OR site:peopleperhour.com OR site:freelancer.com OR site:fiverr.com) ("voice over" OR "voice actor")'
+            "Indie Game & Creative Boards",
+            '(site:itch.io/t/ OR site:behance.net/joblist) ("voice over" OR "voice actor needed" OR "casting")'
+        ),
+        (
+            "Professional Casting Networks",
+            '(site:mandy.com/uk/voiceover-jobs OR site:castingnetworks.com) ("voiceover" OR "voice actor" OR "commercial")'
         )
     ]
 
@@ -193,13 +197,6 @@ def scrape_open_web_search(logs):
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
     }
     
-    target_domains = [
-        "reddit.com", "linkedin.com", "bsky.app", "x.com", "twitter.com", 
-        "castingcall.club", "twine.net", "behance.net", 
-        "upwork.com", "peopleperhour.com", "freelancer.com", "guru.com", "fiverr.com"
-    ]
-
-    # Expanded pay keywords to correctly identify paid listings using terms like 'budget' or 'rate'
     pay_keywords = ["paid", "$", "£", "€", "fee", "budget", "rate", "compensation", "stipend", "hiring", "salary"]
 
     for label, search_query in queries:
@@ -218,26 +215,32 @@ def scrape_open_web_search(logs):
                 raw_link = a_tag.get("href", "")
                 snippet = a_tag.get_text(strip=True)
                 
-                # Unpack Yahoo redirect wrapper URLs
                 if "RU=" in raw_link:
                     try:
                         raw_link = urllib.parse.unquote(raw_link.split("RU=")[1].split("/RK=")[0])
                     except Exception:
                         pass
                 
-                if any(domain in raw_link for domain in target_domains) and "yahoo.com" not in raw_link and len(snippet) > 20:
+                if raw_link.startswith("http") and "yahoo.com" not in raw_link:
+                    path_parts = raw_link.replace("https://", "").replace("http://", "").split("/")
+                    if len(path_parts) < 3:
+                        continue
                     
-                    category_tag = "Voice Acting"
-                    if "reddit.com/r/audiodrama" in raw_link:
-                        category_tag = "Audiobooks"
-                    elif "linkedin" in raw_link or "behance" in raw_link:
-                        category_tag = "Commercial Print/Modeling"
-                    elif any(domain in raw_link for domain in ["upwork", "peopleperhour", "freelancer", "guru", "fiverr"]):
-                        category_tag = "Corporate/ELT"
-                    elif "x.com" in raw_link or "twitter.com" in raw_link:
-                        category_tag = "Animation"
+                    snippet_lower = snippet.lower()
+                    if not any(k in snippet_lower for k in ["voice", "actor", "audition", "casting", "narrator", "vo"]):
+                        continue
 
-                    is_paid = any(w in snippet.lower() for w in pay_keywords)
+                    category_tag = "Voice Acting"
+                    if "audiodrama" in raw_link or "recordthis" in raw_link:
+                        category_tag = "Audiobooks"
+                    elif "twine.net" in raw_link:
+                        category_tag = "Corporate/ELT" if "corporate" in snippet_lower else "Voice Acting"
+                    elif "behance" in raw_link:
+                        category_tag = "Commercial Print/Modeling"
+                    elif "itch.io" in raw_link:
+                        category_tag = "Video Games"
+
+                    is_paid = any(w in snippet_lower for w in pay_keywords)
 
                     opportunities.append({
                         "title": snippet[:100] + "...",

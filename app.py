@@ -511,7 +511,7 @@ else:
         # TAB 1:  CASTING OPPORTUNITIES FEED
         # ---------------------------------------------------------------------
         with tabs[0]:
-            st.header("🎯 Tab 1: Scraped Casting Opportunities Feed")
+            st.header("🎯 Tab 1: Casting Opportunities Feed")
             st.caption("Active calls matched against your Spotlight specs: Age, Gender, Accents, and Vocal Quality.")
 
             col_sync, col_purge = st.columns([1.5, 1])
@@ -824,7 +824,7 @@ Spotlight Profile: {u_spotlight}{gdpr_footer}"""
         # TAB 4: UNIFIED RESOURCE & INTAKE VAULT
         # ---------------------------------------------------------------------
         with tabs[3]:
-            st.header("📚 Tab 4: Unified Resource & Agency Intake Vault")
+            st.header("📚 Tab 4: Unified Resources & Intake Vault")
             st.caption("Ungated roster submission forms, audiobook portals, and dubbing intake links.")
             
             vault_data = [

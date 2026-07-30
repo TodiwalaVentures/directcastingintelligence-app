@@ -1,11 +1,38 @@
-import os
 import urllib.parse
 from datetime import datetime
-from flask import Flask, jsonify, render_template_string
 import requests
 from bs4 import BeautifulSoup
+import streamlit as st
 
-app = Flask(__name__)
+# Streamlit Page Configuration
+st.set_page_config(
+    page_title="Direct Casting Intelligence",
+    layout="wide",
+    page_icon="🔍"
+)
+
+# Custom Styling to match your dashboard
+st.markdown("""
+    <style>
+    .source-badge {
+        background-color: #DBEAFE;
+        color: #1E40AF;
+        padding: 3px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+        font-weight: 600;
+    }
+    .type-badge {
+        background-color: #F1F5F9;
+        color: #475569;
+        padding: 3px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+        font-weight: 500;
+        margin-left: 6px;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
 # Standard browser headers required to bypass 403 blocks
 HEADERS = {
@@ -143,7 +170,6 @@ def scrape_linkedin(logs):
                 snippet = snippet_elem.get_text().strip()
                 raw_link = title_elem["href"]
 
-                # Extract real destination link from DuckDuckGo redirect
                 if "uddg=" in raw_link:
                     raw_link = urllib.parse.unquote(raw_link.split("uddg=")[1].split("&")[0])
 
@@ -160,158 +186,88 @@ def scrape_linkedin(logs):
     return opportunities
 
 
-@app.route("/api/scrape", methods=["GET"])
-def run_scrubber():
-    logs = []
-    results = []
-
-    results.extend(scrape_voice_acting_club(logs))
-    results.extend(scrape_reddit(logs))
-    results.extend(scrape_bluesky(logs))
-    results.extend(scrape_linkedin(logs))
-
-    return jsonify({
-        "status": "success",
-        "count": len(results),
-        "data": results,
-        "logs": logs
-    })
+# --- App State Initialization ---
+if "results" not in st.session_state:
+    st.session_state["results"] = []
+if "logs" not in st.session_state:
+    st.session_state["logs"] = []
+if "has_run" not in st.session_state:
+    st.session_state["has_run"] = False
 
 
-@app.route("/")
-def index():
-    # Embedded HTML UI matching your application layout
-    return render_template_string("""
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <title>Casting Scraper Dashboard</title>
-        <script src="https://cdn.tailwindcss.com"></script>
-    </head>
-    <body class="bg-slate-50 p-8 font-sans text-slate-800">
-        <div class="max-w-7xl mx-auto space-y-6">
-            
-            <div class="flex items-center space-x-4">
-                <button id="scrubBtn" onclick="runScrape()" class="bg-blue-600 hover:bg-blue-700 text-white font-medium px-4 py-2 rounded-md shadow-sm transition">
-                    🔍 Scrub Open Casting Directories Now
-                </button>
-                <button onclick="clearFeed()" class="bg-blue-500 hover:bg-blue-600 text-white font-medium px-4 py-2 rounded-md shadow-sm transition">
-                    🧹 Clear Feed
-                </button>
-            </div>
+# --- Action Controls ---
+col1, col2, _ = st.columns([2.5, 1.5, 6])
 
-            <div id="statusBanner" class="hidden p-4 rounded-md text-sm font-medium"></div>
+with col1:
+    if st.button("🔍 Scrub Open Casting Directories Now", type="primary", use_container_width=True):
+        with st.spinner("Scrubbing Live Feeds..."):
+            logs = []
+            results = []
+            results.extend(scrape_voice_acting_club(logs))
+            results.extend(scrape_reddit(logs))
+            results.extend(scrape_bluesky(logs))
+            results.extend(scrape_linkedin(logs))
 
-            <details class="bg-white border border-slate-200 rounded-md p-4 shadow-sm">
-                <summary class="cursor-pointer font-semibold text-amber-600 flex items-center gap-2">
-                    ⚠️ View Network Connection Logs (<span id="logCount">0</span>)
-                </summary>
-                <ul id="logList" class="mt-3 space-y-1 font-mono text-xs text-red-600 list-disc list-inside">
-                    <li class="text-slate-400 italic">No network errors reported yet.</li>
-                </ul>
-            </details>
+            st.session_state["results"] = results
+            st.session_state["logs"] = logs
+            st.session_state["has_run"] = True
+        st.rerun()
 
-            <div class="bg-white border border-slate-200 rounded-md p-6 shadow-sm space-y-4">
-                <h2 class="text-xl font-bold flex items-center gap-2 text-slate-900">
-                    🔍 Opportunity Search & Specs
-                </h2>
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-500 mb-1">Discipline</label>
-                        <select class="w-full border border-slate-200 bg-slate-50 rounded px-3 py-2 text-sm">
-                            <option>All Disciplines</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-500 mb-1">Target Sex / Gender</label>
-                        <select class="w-full border border-slate-200 bg-slate-50 rounded px-3 py-2 text-sm">
-                            <option>All / Any</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-500 mb-1">Application Method</label>
-                        <select class="w-full border border-slate-200 bg-slate-50 rounded px-3 py-2 text-sm">
-                            <option>All Methods</option>
-                        </select>
-                    </div>
-                </div>
-            </div>
+with col2:
+    if st.button("🧹 Clear Feed", use_container_width=True):
+        st.session_state["results"] = []
+        st.session_state["logs"] = []
+        st.session_state["has_run"] = False
+        st.rerun()
 
-            <div id="resultsContainer" class="space-y-3">
-                <div id="emptyState" class="bg-blue-50 text-blue-800 p-4 rounded-md text-sm">
-                    No active opportunities loaded. Click '🔍 Scrub Open Casting Directories Now' above.
-                </div>
-            </div>
-        </div>
 
-        <script>
-            async function runScrape() {
-                const btn = document.getElementById('scrubBtn');
-                const banner = document.getElementById('statusBanner');
-                const container = document.getElementById('resultsContainer');
-                const logList = document.getElementById('logList');
-                const logCount = document.getElementById('logCount');
+# --- Status Banner ---
+if st.session_state["has_run"]:
+    st.info(f"Scraper completed. Parsed {len(st.session_state['results'])} items from live sources.")
 
-                btn.innerText = "⏳ Scrubbing Live Feeds...";
-                btn.disabled = true;
 
-                try {
-                    const res = await fetch('/api/scrape');
-                    const data = await res.json();
+# --- Connection Logs Expander ---
+log_count = len(st.session_state["logs"])
+with st.expander(f"⚠️ View Network Connection Logs ({log_count})", expanded=False):
+    if log_count > 0:
+        for log_entry in st.session_state["logs"]:
+            st.error(f"• {log_entry}")
+    else:
+        st.success("All connections successful. No network errors reported.")
 
-                    banner.className = "p-4 rounded-md text-sm font-medium bg-amber-50 text-amber-900 border border-amber-200 block";
-                    banner.innerText = `Scraper completed. Parsed ${data.count} items from live sources.`;
 
-                    // Render Logs
-                    logCount.innerText = data.logs.length;
-                    if (data.logs.length > 0) {
-                        logList.innerHTML = data.logs.map(l => `<li>${l}</li>`).join('');
-                    } else {
-                        logList.innerHTML = `<li class="text-emerald-600">All connections successful. No errors.</li>`;
-                    }
+# --- Filters & Search Specs ---
+st.markdown("### 🔍 Opportunity Search & Specs")
+f_col1, f_col2, f_col3, f_col4 = st.columns([2, 2, 2, 2])
 
-                    // Render Cards
-                    if (data.data.length > 0) {
-                        container.innerHTML = data.data.map(item => `
-                            <div class="bg-white border border-slate-200 p-4 rounded-md shadow-sm flex justify-between items-start">
-                                <div>
-                                    <span class="text-xs font-semibold px-2 py-0.5 rounded bg-blue-100 text-blue-800">${item.source}</span>
-                                    <span class="text-xs font-medium px-2 py-0.5 rounded bg-slate-100 text-slate-600 ml-2">${item.type}</span>
-                                    <h3 class="text-base font-bold text-slate-900 mt-2">${item.title}</h3>
-                                    <p class="text-xs text-slate-400 mt-1">Date Posted: ${item.date}</p>
-                                </div>
-                                <a href="${item.link}" target="_blank" class="bg-slate-900 hover:bg-slate-800 text-white text-xs px-3 py-2 rounded-md transition font-medium">
-                                    View Post ↗
-                                </a>
-                            </div>
-                        `).join('');
-                    } else {
-                        container.innerHTML = `<div class="bg-amber-50 text-amber-800 p-4 rounded-md text-sm">No items found matching criteria across live sources.</div>`;
-                    }
-                } catch (err) {
-                    banner.className = "p-4 rounded-md text-sm font-medium bg-red-50 text-red-800 block";
-                    banner.innerText = "Error executing scraper requests.";
-                } finally {
-                    btn.innerText = "🔍 Scrub Open Casting Directories Now";
-                    btn.disabled = false;
-                }
-            }
+with f_col1:
+    st.selectbox("Discipline", ["All Disciplines"])
+with f_col2:
+    st.selectbox("Target Sex / Gender", ["All / Any"])
+with f_col3:
+    st.selectbox("Application Method", ["All Methods"])
+with f_col4:
+    st.checkbox("Strict Voice Quality Filter")
 
-            function clearFeed() {
-                document.getElementById('resultsContainer').innerHTML = `
-                    <div id="emptyState" class="bg-blue-50 text-blue-800 p-4 rounded-md text-sm">
-                        No active opportunities loaded. Click '🔍 Scrub Open Casting Directories Now' above.
-                    </div>
-                `;
-                document.getElementById('statusBanner').classList.add('hidden');
-                document.getElementById('logList').innerHTML = `<li class="text-slate-400 italic">No network errors reported yet.</li>`;
-                document.getElementById('logCount').innerText = "0";
-            }
-        </script>
-    </body>
-    </html>
-    """)
+st.divider()
 
-if __name__ == "__main__":
-    app.run(debug=True, port=5000)
+
+# --- Results Display ---
+if not st.session_state["has_run"] and not st.session_state["results"]:
+    st.info("No active opportunities loaded. Click '🔍 Scrub Open Casting Directories Now' above.")
+elif st.session_state["has_run"] and not st.session_state["results"]:
+    st.warning("No active items found matching criteria across live sources.")
+else:
+    for item in st.session_state["results"]:
+        card_col1, card_col2 = st.columns([5, 1])
+        with card_col1:
+            st.markdown(
+                f"<span class='source-badge'>{item['source']}</span> "
+                f"<span class='type-badge'>{item['type']}</span>",
+                unsafe_allow_html=True
+            )
+            st.markdown(f"**{item['title']}**")
+            st.caption(f"Date Posted: {item['date']}")
+        with card_col2:
+            st.link_button("View Post ↗", item["link"], use_container_width=True)
+        st.divider()

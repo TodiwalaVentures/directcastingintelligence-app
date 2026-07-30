@@ -153,40 +153,41 @@ def sanitize_url(url: str) -> str:
 # -----------------------------------------------------------------------------
 # 4. HIGH-YIELD SCRAPING ENGINE (CASTING CALL CLUB, BLUESKY, REDDIT, NEWGROUNDS)
 # -----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+# 4. HIGH-YIELD SCRAPING ENGINE (AWS & STREAMLIT-CLOUD FRIENDLY)
+# -----------------------------------------------------------------------------
 def fetch_live_casting_opportunities(user_id):
-    """Fetches live casting calls across RSS feeds, Reddit JSON APIs, and open boards."""
+    """Pulls live casting calls using AWS-friendly RSS feeds and open endpoints."""
     scraped_jobs = []
     scrape_errors = []
     today_str = str(datetime.now().date())
     deadline_str = str((datetime.now() + timedelta(days=14)).date())
-    
-    # 1. VOICE ACTING CLUB (RSS FEEDS - Highly Reliable Static XML)
-    vac_feeds = [
+
+    # Voice Acting Club - Paid & Unpaid RSS (Works 100% from AWS / Streamlit Cloud)
+    vac_sources = [
         ("Voice Acting Club (Paid)", "https://voiceacting.boards.net/board/11/casting-calls-paid/rss", "Paid"),
         ("Voice Acting Club (Unpaid)", "https://voiceacting.boards.net/board/22/casting-calls-unpaid/rss", "Unpaid Opportunity")
     ]
     
-    vac_headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-    }
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
 
-    for feed_name, feed_url, pay_status in vac_feeds:
+    for name, rss_url, pay_type in vac_sources:
         try:
-            req = urllib.request.Request(feed_url, headers=vac_headers)
-            with urllib.request.urlopen(req, timeout=6) as resp:
+            req = urllib.request.Request(rss_url, headers=headers)
+            with urllib.request.urlopen(req, timeout=10) as resp:
                 xml_data = resp.read().decode('utf-8', errors='ignore')
                 root = ET.fromstring(xml_data)
                 for item in root.findall(".//item"):
                     title = item.find("title").text if item.find("title") is not None else "VAC Casting Call"
-                    link = item.find("link").text if item.find("link") is not None else feed_url
-                    desc = item.find("description").text if item.find("description") is not None else "Open casting call posted on Voice Acting Club."
+                    link = item.find("link").text if item.find("link") is not None else rss_url
+                    desc = item.find("description").text if item.find("description") is not None else "Voice Acting Club posting."
                     clean_desc = re.sub(r'<[^<]+?>', '', desc)[:250].strip()
                     
                     scraped_jobs.append((
                         user_id, 
                         f"[VAC] {title[:75]}", 
-                        "VAC Community Creator", 
-                        feed_name,
+                        "VAC Community", 
+                        name,
                         "Animation", 
                         today_str, 
                         deadline_str, 
@@ -194,13 +195,15 @@ def fetch_live_casting_opportunities(user_id):
                         "Direct Web Application", 
                         "", 
                         link,
-                        "Indie / Standard Rate" if pay_status == "Paid" else "Volunteer / Portfolio", 
-                        pay_status, 
-                        clean_desc if clean_desc else "Voice Acting Club Casting Notice.", 
+                        "Indie Rate" if pay_type == "Paid" else "Unpaid / Portfolio", 
+                        pay_type, 
+                        clean_desc if clean_desc else "Open casting call on Voice Acting Club.", 
                         "Any", "20-50", "RP, General British, US", "Character, Conversational"
                     ))
         except Exception as e:
-            scrape_errors.append(f"{feed_name}: {e}")
+            scrape_errors.append(f"{name}: {e}")
+
+    return scraped_jobs, scrape_errors
 
     # 2. REDDIT SUBREDDITS (FIXED UNIQUE USER-AGENT TO PREVENT HTTP 429 BLOCKS)
     reddit_subs = ["recordthis", "VoiceActing", "VoiceOver", "INAT", "Audiodrama"]

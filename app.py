@@ -157,69 +157,24 @@ def sanitize_url(url: str) -> str:
 # -----------------------------------------------------------------------------
 # 4. DYNAMIC LIVE WEB SCRAPER ENGINE
 # -----------------------------------------------------------------------------
-
-def scrape_reddit_rss2json(logs):
-    """
-    Bypasses Reddit's HTTP 403 Cloud IP blocks by routing RSS requests 
-    through the free rss2json.com public API proxy.
-    """
-    subreddits = [
-        "recordthis", "VoiceActing", "voiceover", "INAT", 
-        "AudioDrama", "acting", "gamedev", "LetsPlay"
-    ]
-    opportunities = []
-    keywords = [
-        "casting", "hiring", "paid", "va needed", "voice artist", 
-        "voice actor", "looking for voice", "seeking voices", 
-        "seeking narrator", "vo casting", "voiceover", "audition"
-    ]
-    
-    for sub in subreddits:
-        source_label = f"Reddit /r/{sub}"
-        # Route through the RSS2JSON middleman API
-        url = f"https://api.rss2json.com/v1/api.json?rss_url=https://www.reddit.com/r/{sub}/new/.rss"
-        try:
-            time.sleep(1.0) # Light pacing for the API
-            res = requests.get(url, timeout=10)
-            if res.status_code != 200:
-                logs.append(f"{source_label}: API Error {res.status_code}")
-                continue
-            
-            data = res.json()
-            if data.get("status") == "ok":
-                for item in data.get("items", []):
-                    title = item.get("title", "").strip()
-                    
-                    if any(kw in title.lower() for kw in keywords):
-                        link = item.get("link", f"https://reddit.com/r/{sub}")
-                        pub_date = item.get("pubDate", "")[:10]
-                        pay_type = "Paid" if any(w in title.lower() for w in ["paid", "$", "£", "hiring"]) else "Unpaid Opportunity"
-                        
-                        opportunities.append({
-                            "title": title[:100] + "...",
-                            "company": f"Reddit /r/{sub} Poster",
-                            "source": source_label,
-                            "category": "Audiobooks" if sub == "AudioDrama" else ("Screen/Film/TV" if sub in ["acting", "gamedev"] else "Voice Acting"),
-                            "posted_date": pub_date if pub_date else datetime.now().strftime("%Y-%m-%d"),
-                            "apply_url": link,
-                            "pay_type": pay_type,
-                            "rate_budget": "Paid Role" if pay_type == "Paid" else "Community Call",
-                            "job_desc": f"{title}\n\n[REQ_METADATA|Sex:Any|Age:20-50|Accents:Any|Style:Conversational]"
-                        })
-        except Exception as e:
-            logs.append(f"{source_label}: {str(e)}")
-            
-    return opportunities
-
+SCRAPER_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.5",
+}
 
 def scrape_open_web_search(logs):
     """
-    Scrapes open casting platforms via Yahoo Search to bypass 
-    DuckDuckGo's HTTP 202 Cloudflare/Bot CAPTCHA challenges.
+    Scrapes Reddit communities, social networks, casting boards, 
+    and freelance portals via Yahoo Search to bypass cloud IP blocks and proxy errors.
     """
     opportunities = []
     
     queries = [
+        (
+            "Reddit Casting Communities",
+            '(site:reddit.com/r/VoiceActing OR site:reddit.com/r/voiceover OR site:reddit.com/r/RecordThis OR site:reddit.com/r/audiodrama) ("casting" OR "paid" OR "voice actor" OR "audition" OR "hiring")'
+        ),
         (
             "Social Networks & Communities",
             '(site:linkedin.com/posts OR site:x.com OR site:twitter.com OR site:bsky.app/profile) ("voice artist needed" OR "voice actor needed" OR "VO casting" OR "VACastingCallRT")'
@@ -239,10 +194,13 @@ def scrape_open_web_search(logs):
     }
     
     target_domains = [
-        "linkedin.com", "bsky.app", "x.com", "twitter.com", "reddit.com", 
+        "reddit.com", "linkedin.com", "bsky.app", "x.com", "twitter.com", 
         "castingcall.club", "twine.net", "behance.net", 
         "upwork.com", "peopleperhour.com", "freelancer.com", "guru.com", "fiverr.com"
     ]
+
+    # Expanded pay keywords to correctly identify paid listings using terms like 'budget' or 'rate'
+    pay_keywords = ["paid", "$", "£", "€", "fee", "budget", "rate", "compensation", "stipend", "hiring", "salary"]
 
     for label, search_query in queries:
         url = f"https://search.yahoo.com/search?p={urllib.parse.quote(search_query)}"
@@ -256,25 +214,30 @@ def scrape_open_web_search(logs):
                 
             soup = BeautifulSoup(res.text, "html.parser")
             
-            # Yahoo wraps results in standard <a> tags, making it highly scrapeable
             for a_tag in soup.find_all("a"):
                 raw_link = a_tag.get("href", "")
                 snippet = a_tag.get_text(strip=True)
                 
-                # Unpack Yahoo redirect URLs to get the true destination
+                # Unpack Yahoo redirect wrapper URLs
                 if "RU=" in raw_link:
-                    raw_link = urllib.parse.unquote(raw_link.split("RU=")[1].split("/RK=")[0])
+                    try:
+                        raw_link = urllib.parse.unquote(raw_link.split("RU=")[1].split("/RK=")[0])
+                    except Exception:
+                        pass
                 
-                # Check if the link goes to one of our target platforms and isn't a Yahoo internal link
                 if any(domain in raw_link for domain in target_domains) and "yahoo.com" not in raw_link and len(snippet) > 20:
                     
                     category_tag = "Voice Acting"
-                    if "linkedin" in raw_link or "behance" in raw_link:
+                    if "reddit.com/r/audiodrama" in raw_link:
+                        category_tag = "Audiobooks"
+                    elif "linkedin" in raw_link or "behance" in raw_link:
                         category_tag = "Commercial Print/Modeling"
                     elif any(domain in raw_link for domain in ["upwork", "peopleperhour", "freelancer", "guru", "fiverr"]):
                         category_tag = "Corporate/ELT"
                     elif "x.com" in raw_link or "twitter.com" in raw_link:
                         category_tag = "Animation"
+
+                    is_paid = any(w in snippet.lower() for w in pay_keywords)
 
                     opportunities.append({
                         "title": snippet[:100] + "...",
@@ -283,9 +246,9 @@ def scrape_open_web_search(logs):
                         "category": category_tag,
                         "posted_date": datetime.now().strftime("%Y-%m-%d"),
                         "apply_url": raw_link,
-                        "pay_type": "Paid" if any(w in snippet.lower() for w in ["paid", "$", "£", "fee", "budget"]) else "Unpaid Opportunity",
-                        "rate_budget": "Open Rate / See Listing",
-                        "job_desc": f"Found via open casting search: {snippet}\n\n[REQ_METADATA|Sex:Any|Age:25-45|Accents:RP, General British|Style:Warm, Articulate]"
+                        "pay_type": "Paid" if is_paid else "Unpaid Opportunity",
+                        "rate_budget": "Paid Role" if is_paid else "Open Rate / Community Call",
+                        "job_desc": f"{snippet}\n\n[REQ_METADATA|Sex:Any|Age:25-45|Accents:RP, General British|Style:Warm, Articulate]"
                     })
                     
         except Exception as e:
@@ -298,11 +261,9 @@ def run_all_scrapers():
     logs = []
     results = []
     
-    # Run the newly updated proxy and engine functions
-    results.extend(scrape_reddit_rss2json(logs))
+    # Executes robust Yahoo search indexer covering Reddit and all target platforms
     results.extend(scrape_open_web_search(logs))
     
-    # Deduplicate results by URL
     seen_links = set()
     deduped = []
     for r in results:

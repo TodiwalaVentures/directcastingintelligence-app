@@ -151,23 +151,25 @@ def sanitize_url(url: str) -> str:
     return "#"
 
 # -----------------------------------------------------------------------------
-# 4. HIGH-YIELD SCRAPING ENGINE (100% AUTHENTIC JOBS ONLY - FAST TIMEOUTS)
+# 4. HIGH-YIELD SCRAPING ENGINE (WITH ERROR DIAGNOSTICS & UNIQUE USER-AGENT)
 # -----------------------------------------------------------------------------
 def fetch_live_casting_opportunities(user_id):
     """Fetches maximum live casting calls across open APIs, feeds, and subreddits."""
     scraped_jobs = []
-    today = datetime.now().date()
-    today_str = str(today)
-    deadline_str = str(today + timedelta(days=14))
+    scrape_errors = []
+    today_str = str(datetime.now().date())
+    deadline_str = str((datetime.now() + timedelta(days=14)).date())
+    
+    # API-compliant User-Agent header prevents HTTP 403 / 429 blocks on Cloud hosting
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
+        'User-Agent': 'DCI-Casting-Intelligence/2.0 (Contact: HomerT-DigitalMedia)',
+        'Accept': 'application/json, text/xml, */*'
     }
 
-    # 1. LIVE SCRAPE: Voice Acting Club (VAC) Forum RSS Feed
+    # 1. Voice Acting Club (VAC) RSS Feed
     try:
         req = urllib.request.Request("https://board.voiceactingclub.com/rss/topics", headers=headers)
-        with urllib.request.urlopen(req, timeout=4) as resp:
+        with urllib.request.urlopen(req, timeout=5) as resp:
             xml_data = resp.read()
             root = ET.fromstring(xml_data)
             for item in root.findall('.//item')[:10]:
@@ -181,12 +183,12 @@ def fetch_live_casting_opportunities(user_id):
                     "Commercial / Standard Indie Rate", "Paid", clean_desc, "Any", "18-50", "RP, General British, US", "Character, Conversational"
                 ))
     except Exception as e:
-        print(f"[Scraper Warning] VAC RSS: {e}")
+        scrape_errors.append(f"VAC RSS: {e}")
 
-    # 2. LIVE SCRAPE: Casting Call Club (CCC) Public API Feed (MAX YIELD: 25 RESULTS)
+    # 2. Casting Call Club (CCC) API
     try:
         req = urllib.request.Request("https://www.castingcall.club/api/v1/projects?limit=25", headers=headers)
-        with urllib.request.urlopen(req, timeout=4) as resp:
+        with urllib.request.urlopen(req, timeout=5) as resp:
             data = json.loads(resp.read().decode('utf-8'))
             for proj in data.get('projects', []):
                 p_title = proj.get('title', 'CCC Open Casting Project')
@@ -199,23 +201,16 @@ def fetch_live_casting_opportunities(user_id):
                     "$150 - $400 / Commercial Project", "Paid", p_desc, "Male", "20-40", "General British, US, RP", "Energetic, Grounded"
                 ))
     except Exception as e:
-        print(f"[Scraper Warning] CCC API: {e}")
+        scrape_errors.append(f"CCC API: {e}")
 
-    # 3. LIVE SCRAPE: 9 REDDIT SUBREDDITS MATRIX
-    reddit_subs = [
-        "recordthis", "VoiceActing", "CastingSeeks", "VoiceOver", 
-        "INAT", "Audiodrama", "IndieDev", "gamedev", "CastingCalls"
-    ]
-    reddit_keywords = [
-        'paid', 'casting', 'hiring', 'looking for', 'casting call', 
-        'voice actor', 'voice artist', 'voice actor needed', 'voice artist needed', 
-        'va needed', 'audition', 'voice wanted', 'seeking va', 'narrator needed', 
-        'audiobook narrator', 'character voice', 'casting notice'
-    ]
+    # 3. Reddit Subreddits
+    reddit_subs = ["recordthis", "VoiceActing", "CastingSeeks", "VoiceOver", "INAT", "Audiodrama", "IndieDev", "gamedev", "CastingCalls"]
+    reddit_keywords = ['paid', 'casting', 'hiring', 'looking for', 'casting call', 'voice actor', 'voice artist', 'va needed', 'audition', 'narrator needed']
+    
     for sub in reddit_subs:
         try:
             req = urllib.request.Request(f"https://www.reddit.com/r/{sub}/new.json?limit=8", headers=headers)
-            with urllib.request.urlopen(req, timeout=3) as resp:
+            with urllib.request.urlopen(req, timeout=4) as resp:
                 r_data = json.loads(resp.read().decode('utf-8'))
                 posts = r_data.get('data', {}).get('children', [])
                 for p in posts:
@@ -232,9 +227,9 @@ def fetch_live_casting_opportunities(user_id):
                             r_text if r_text else "Reddit open audition call.", "Any", "20-50", "RP, General British", "Warm, Conversational"
                         ))
         except Exception as e:
-            print(f"[Scraper Warning] Reddit /r/{sub}: {e}")
+            scrape_errors.append(f"Reddit /r/{sub}: {e}")
 
-    return scraped_jobs
+    return scraped_jobs, scrape_errors
 
 # -----------------------------------------------------------------------------
 # 5. UNIFIED RESOURCE VAULT DATABASE (100% CLEANED & VERIFIED - NO SCAM SITES)
@@ -487,7 +482,7 @@ else:
                 if st.button("🔄 Scrub Open Casting Directories Now"):
                     st.toast("Scrubbing live external directories, APIs & subreddits...", icon="🔍")
                     
-                    scraped_data_feed = fetch_live_casting_opportunities(user_id)
+                    scraped_data_feed, scrape_errors = fetch_live_casting_opportunities(user_id)
                     
                     conn = get_db_connection()
                     c = conn.cursor()
@@ -506,7 +501,16 @@ else:
                         st.success(f"Fetched {len(jobs_to_insert)} new live casting calls across all directories!")
                         st.rerun()
                     else:
-                        st.info("Live feed is fully up to date.")
+                        c.execute("SELECT COUNT(*) FROM active_jobs WHERE user_id = %s", (user_id,))
+                        total_db_jobs = c.fetchone()[0]
+                        if total_db_jobs > 0:
+                            st.info("Live feed is fully up to date.")
+                        else:
+                            st.warning(f"Scraper completed. Parsed {len(scraped_data_feed)} items from live sources.")
+                            if scrape_errors:
+                                with st.expander("⚠️ View Network Connection Logs"):
+                                    for err in scrape_errors:
+                                        st.write(f"- `{err}`")
                     conn.close()
 
             with col_purge:

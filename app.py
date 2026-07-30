@@ -157,42 +157,17 @@ def sanitize_url(url: str) -> str:
 # -----------------------------------------------------------------------------
 # 4. DYNAMIC LIVE WEB SCRAPER ENGINE
 # -----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+# 4. DYNAMIC LIVE WEB SCRAPER ENGINE
+# -----------------------------------------------------------------------------
 SCRAPER_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0.0.0 Safari/537.36",
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.5",
 }
 
-def scrape_voice_acting_club(logs):
-    opportunities = []
-    urls = [("Paid", "https://www.castingcall.club/find_jobs"), ("Unpaid", "https://www.castingcall.club/find_jobs")]
-    for category, url in urls:
-        source_label = f"Casting Call ({category})"
-        try:
-            res = requests.get(url, headers=SCRAPER_HEADERS, timeout=10)
-            res.raise_for_status()
-            soup = BeautifulSoup(res.content, "html.parser")
-            for item in soup.find_all("item"):
-                title = item.find("title").get_text() if item.find("title") else "Untitled Call"
-                link = item.find("link").get_text() if item.find("link") else url
-                pub_date = item.find("pubdate").get_text() if item.find("pubdate") else "Recent"
-                opportunities.append({
-                    "title": title.strip(),
-                    "company": f"VAC {category} Call",
-                    "source": source_label,
-                    "category": "Voice Acting",
-                    "posted_date": pub_date[:16] if len(pub_date) > 16 else pub_date,
-                    "apply_url": link.strip(),
-                    "pay_type": "Paid" if category == "Paid" else "Unpaid Opportunity",
-                    "rate_budget": "See Listing Details" if category == "Paid" else "Unpaid / Credit",
-                    "job_desc": f"Open casting call via Voice Acting Club ({category}).\n\n[REQ_METADATA|Sex:Any|Age:20-50|Accents:Any|Style:Conversational]"
-                })
-        except Exception as e:
-            logs.append(f"{source_label}: {str(e)}")
-    return opportunities
-
 def scrape_reddit_rss(logs):
-    """Scrapes community subreddits via RSS feeds with rate-limit pacing."""
+    """Scrapes community subreddits via RSS feeds with strict rate-limit pacing."""
     subreddits = [
         "recordthis", "VoiceActing", "voiceover", "INAT", 
         "AudioDrama", "acting", "gamedev", "LetsPlay"
@@ -204,18 +179,22 @@ def scrape_reddit_rss(logs):
         "seeking narrator", "vo casting", "voiceover", "audition"
     ]
     
+    reddit_headers = {
+        "User-Agent": "DCI-Opportunity-Scraper/1.0 (RSS Feed Reader)",
+        "Accept": "application/rss+xml, application/xml"
+    }
+    
     for sub in subreddits:
         source_label = f"Reddit /r/{sub}"
         url = f"https://www.reddit.com/r/{sub}/new/.rss"
         try:
-            # 0.5s pause between subreddits prevents HTTP 429 Rate Limits
-            time.sleep(0.5)
-            res = requests.get(url, headers=SCRAPER_HEADERS, timeout=10)
+            time.sleep(2.5)
+            res = requests.get(url, headers=reddit_headers, timeout=10)
             if res.status_code != 200:
                 logs.append(f"{source_label}: HTTP Error {res.status_code}")
                 continue
             
-            soup = BeautifulSoup(res.content, "html.parser")
+            soup = BeautifulSoup(res.content, "xml")
             for entry in soup.find_all("entry"):
                 title_elem = entry.find("title")
                 link_elem = entry.find("link")
@@ -243,10 +222,11 @@ def scrape_reddit_rss(logs):
             
     return opportunities
 
+
 def scrape_open_web_search(logs):
     """
     Scrapes open web networks, social handles, and freelance job boards.
-    Groups queries into 3 requests with pacing to avoid HTTP 202 anti-bot challenges.
+    Includes Casting Call Club via search indexing to bypass JavaScript blocks.
     """
     opportunities = []
     
@@ -258,7 +238,7 @@ def scrape_open_web_search(logs):
         ),
         (
             "Casting & Creative Boards (Casting Call Club/Twine/Behance)",
-            ' site:twine.net/jobs OR site:behance.net/joblist) '
+            '(site:castingcall.club OR site:twine.net/jobs OR site:behance.net/joblist) '
             '("voice actor" OR "voice over" OR "casting call" OR "audition")'
         ),
         (
@@ -268,12 +248,19 @@ def scrape_open_web_search(logs):
         )
     ]
 
+    ddg_headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.5",
+        "Referer": "https://duckduckgo.com/",
+        "Upgrade-Insecure-Requests": "1"
+    }
+
     for label, search_query in queries:
         url = f"https://html.duckduckgo.com/html/?q={urllib.parse.quote(search_query)}"
         try:
-            # 1.2s pause between web queries prevents DuckDuckGo HTTP 202 bot challenges
-            time.sleep(1.2)
-            res = requests.get(url, headers=SCRAPER_HEADERS, timeout=10)
+            time.sleep(3.0)
+            res = requests.get(url, headers=ddg_headers, timeout=10)
             if res.status_code != 200:
                 logs.append(f"{label}: HTTP Error {res.status_code}")
                 continue
@@ -316,10 +303,11 @@ def scrape_open_web_search(logs):
 
     return opportunities
 
+
 def run_all_scrapers():
     logs = []
     results = []
-    results.extend(scrape_voice_acting_club(logs))
+    
     results.extend(scrape_reddit_rss(logs))
     results.extend(scrape_open_web_search(logs))
     
